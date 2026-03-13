@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap');
+
+@import "tailwindcss";
+@plugin '@tailwindcss/forms';
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+  }
+
+  input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 40px #f1f5f9 inset;
+    -webkit-text-fill-color: #334155;
+  }
+
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 40px #ffffff inset;
+  }
+}
+
+@layer utilities {
+  /* dot-grid only sets background-image so inline style background gradient shows through */
+  .dot-grid {
+    background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+}
