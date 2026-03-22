@@ -1,5 +1,28 @@
 <!-- src/routes/+page.svelte -->
 <script>
+  import { onMount } from 'svelte';
+
+  // Redirect already logged-in users to their dashboard
+  onMount(async () => {
+    try {
+      const { auth } = await import('$lib/firebase');
+      const { db }   = await import('$lib/firebase');
+      const { onAuthStateChanged } = await import('firebase/auth');
+      const { doc, getDoc }        = await import('firebase/firestore');
+
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) return; // not logged in, stay on login page
+        try {
+          const userSnap = await getDoc(doc(db, 'users', user.uid));
+          if (userSnap.exists()) {
+            const r = userSnap.data().role;
+            window.location.href = r === 'admin' ? '/admin/dashboard' : '/staff/dashboard';
+          }
+        } catch { /* non-critical */ }
+      });
+    } catch { /* non-critical */ }
+  });
+
   let email    = '';
   let password = '';
   let role     = 'staff'; // 'staff' | 'admin'
@@ -274,6 +297,15 @@
           <span>Login</span>
         {/if}
       </button>
+
+      <!-- Sign up link -->
+      <p class="text-center text-xs text-slate-400 mt-3">
+        Don't have an account?
+        <button type="button" on:click={() => { window.location.href = '/signup'; }}
+          class="text-blue-600 font-semibold hover:underline ml-1 bg-transparent border-none cursor-pointer">
+          Sign up here
+        </button>
+      </p>
 
       <!-- Forgot password -->
       <p class="text-center text-xs text-slate-400 mt-4">

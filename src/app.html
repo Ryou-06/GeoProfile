@@ -2,10 +2,174 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+
+		<!-- PWA -->
+		<link rel="manifest" href="/manifest.json" />
+		<meta name="theme-color" content="#0f2060" />
+		<link rel="icon" href="/icon-512.png" />
+
+		<!-- iOS PWA -->
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="GeoProfile" />
+		<link rel="apple-touch-icon" href="/icon-512.png" />
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
 		<div style="display: contents">%sveltekit.body%</div>
+
+		<!-- PWA Install Banner -->
+		<div id="pwa-banner" style="
+			display: none;
+			position: fixed;
+			bottom: 0; left: 0; right: 0;
+			z-index: 9999;
+			background: linear-gradient(135deg, #0f2060, #1a4fa0);
+			color: white;
+			padding: 14px 16px;
+			flex-direction: row;
+			align-items: center;
+			gap: 12px;
+			box-shadow: 0 -4px 20px rgba(0,0,0,0.25);
+			font-family: 'Inter', sans-serif;
+		">
+			<img src="/icon-512.png" style="width:40px;height:40px;border-radius:10px;flex-shrink:0;" alt="GeoProfile" />
+			<div style="flex:1;min-width:0;">
+				<p style="margin:0;font-weight:800;font-size:14px;">Install GeoProfile</p>
+				<p style="margin:0;font-size:11px;opacity:0.75;">Add to home screen for quick access</p>
+			</div>
+			<button id="pwa-install-btn" style="
+				background: white;
+				color: #0f2060;
+				border: none;
+				padding: 8px 16px;
+				border-radius: 20px;
+				font-weight:800;
+				font-size: 13px;
+				cursor: pointer;
+				flex-shrink:0;
+			">Install</button>
+			<button id="pwa-dismiss-btn" style="
+				background: transparent;
+				border: none;
+				color: white;
+				opacity: 0.6;
+				font-size: 20px;
+				cursor: pointer;
+				padding: 0 4px;
+				flex-shrink:0;
+				line-height:1;
+			">✕</button>
+		</div>
+
+		<!-- iOS Install Tip (Safari only) -->
+		<div id="ios-banner" style="
+			display: none;
+			position: fixed;
+			bottom: 0; left: 0; right: 0;
+			z-index: 9999;
+			background: linear-gradient(135deg, #0f2060, #1a4fa0);
+			color: white;
+			padding: 14px 16px;
+			flex-direction: column;
+			gap: 6px;
+			box-shadow: 0 -4px 20px rgba(0,0,0,0.25);
+			font-family: 'Inter', sans-serif;
+		">
+			<div style="display:flex;align-items:center;gap:10px;">
+				<img src="/icon-512.png" style="width:36px;height:36px;border-radius:9px;flex-shrink:0;" alt="GeoProfile" />
+				<div style="flex:1;">
+					<p style="margin:0;font-weight:800;font-size:14px;">Install GeoProfile</p>
+					<p style="margin:0;font-size:11px;opacity:0.75;">Add to home screen for quick access</p>
+				</div>
+				<button id="ios-dismiss-btn" style="
+					background:transparent;border:none;color:white;
+					opacity:0.6;font-size:20px;cursor:pointer;padding:0 4px;line-height:1;
+				">✕</button>
+			</div>
+			<p style="margin:0;font-size:12px;opacity:0.85;padding-left:46px;">
+				Tap <strong>Share ↑</strong> then <strong>"Add to Home Screen"</strong>
+			</p>
+		</div>
+
+		<script>
+			// ── Register Service Worker ──────────────────────────
+			if ('serviceWorker' in navigator) {
+				window.addEventListener('load', () => {
+					navigator.serviceWorker.register('/sw.js')
+						.then(reg => console.log('SW registered:', reg.scope))
+						.catch(err => console.warn('SW failed:', err));
+				});
+			}
+
+			// ── PWA Install Prompt (Android Chrome) ──────────────
+			let deferredPrompt = null;
+			const banner      = document.getElementById('pwa-banner');
+			const installBtn  = document.getElementById('pwa-install-btn');
+			const dismissBtn  = document.getElementById('pwa-dismiss-btn');
+
+			// Check if already installed
+			const isInstalled = window.matchMedia('(display-mode: standalone)').matches
+				|| window.navigator.standalone === true;
+
+			// Only show install banner on /register/ pages (not login/dashboard)
+			const isRegisterPage = window.location.pathname.startsWith('/register');
+
+			if (!isInstalled && !sessionStorage.getItem('pwa-dismissed') && isRegisterPage) {
+				window.addEventListener('beforeinstallprompt', (e) => {
+					e.preventDefault();
+					deferredPrompt = e;
+					// Show banner immediately
+					if (banner) banner.style.display = 'flex';
+				});
+			}
+
+			if (installBtn) {
+				installBtn.addEventListener('click', async () => {
+					if (!deferredPrompt) return;
+					deferredPrompt.prompt();
+					const { outcome } = await deferredPrompt.userChoice;
+					console.log('PWA install outcome:', outcome);
+					deferredPrompt = null;
+					if (banner) banner.style.display = 'none';
+				});
+			}
+
+			if (dismissBtn) {
+				dismissBtn.addEventListener('click', () => {
+					if (banner) banner.style.display = 'none';
+					sessionStorage.setItem('pwa-dismissed', '1');
+				});
+			}
+
+			// ── iOS Safari Install Tip ───────────────────────────
+			const isIOS    = /iphone|ipad|ipod/i.test(navigator.userAgent);
+			const isSafari = /safari/i.test(navigator.userAgent) && !/chrome/i.test(navigator.userAgent);
+			const iosBanner   = document.getElementById('ios-banner');
+			const iosDismiss  = document.getElementById('ios-dismiss-btn');
+
+			const isRegisterPageIOS = window.location.pathname.startsWith('/register');
+			if (isIOS && isSafari && !isInstalled && isRegisterPageIOS && !sessionStorage.getItem('ios-dismissed')) {
+				// Show iOS tip after 2 seconds
+				setTimeout(() => {
+					if (iosBanner) iosBanner.style.display = 'flex';
+				}, 2000);
+			}
+
+			if (iosDismiss) {
+				iosDismiss.addEventListener('click', () => {
+					if (iosBanner) iosBanner.style.display = 'none';
+					sessionStorage.setItem('ios-dismissed', '1');
+				});
+			}
+
+			// Hide banner once installed
+			window.addEventListener('appinstalled', () => {
+				if (banner) banner.style.display = 'none';
+				console.log('GeoProfile installed!');
+			});
+		</script>
 	</body>
 </html>
