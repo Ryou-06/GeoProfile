@@ -25,7 +25,7 @@
   let profileResident = null;
 
   let searchQuery = '';
-  let filterZone = 'All Zones';
+  let filterStreet = 'All Streets';
   let loading = true;
   /** @type {string | null} */
   let loadError = null;
@@ -34,13 +34,13 @@
   /** @type {(() => void)[]} */
   let unsubs = [];
 
-  const zones = ['All Zones', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
+  const streets = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
 
   /** @type {Record<string, { markerColor: string, avatarBg: string, badgeClass: string }>} */
   const categoryConfig = {
-    'Regular': { markerColor: '#2563eb', avatarBg: '#2563eb', badgeClass: 'bg-blue-100 text-blue-700' },
-    'Senior': { markerColor: '#10b981', avatarBg: '#10b981', badgeClass: 'bg-emerald-100 text-emerald-700' },
-    'PWD': { markerColor: '#f59e0b', avatarBg: '#f59e0b', badgeClass: 'bg-amber-100 text-amber-700' },
+    'Regular':       { markerColor: '#2563eb', avatarBg: '#2563eb', badgeClass: 'bg-blue-100 text-blue-700' },
+    'Senior':        { markerColor: '#10b981', avatarBg: '#10b981', badgeClass: 'bg-emerald-100 text-emerald-700' },
+    'PWD':           { markerColor: '#f59e0b', avatarBg: '#f59e0b', badgeClass: 'bg-amber-100 text-amber-700' },
     'Single Parent': { markerColor: '#8b5cf6', avatarBg: '#8b5cf6', badgeClass: 'bg-violet-100 text-violet-700' },
   };
 
@@ -57,7 +57,6 @@
     return (name ?? '??').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
   }
 
-  // ── Get household marker color based on residents ──────
   /** @param {any[]} residents */
   function getHouseholdMarkerColor(residents) {
     if (residents.some(r => r.isPWD)) return categoryConfig['PWD'].markerColor;
@@ -66,31 +65,28 @@
     return categoryConfig['Regular'].markerColor;
   }
 
-  // ── Filtered households ────────────────────────────────
+  // ── Filtered households by street ─────────────────────
   $: filteredHouseholds = households.filter(h => {
     const q = searchQuery.toLowerCase();
-    const matchSearch = !q || 
-      h.address?.toLowerCase().includes(q) || 
-      h.zone?.toLowerCase().includes(q) ||
+    const matchSearch = !q ||
+      h.address?.toLowerCase().includes(q) ||
+      h.street?.toLowerCase().includes(q) ||
       h.residents.some(/** @param {any} r */ r => r.name?.toLowerCase().includes(q));
-    const matchZone = filterZone === 'All Zones' || h.zone === filterZone;
-    return matchSearch && matchZone;
+    const matchStreet = filterStreet === 'All Streets' || h.street === filterStreet;
+    return matchSearch && matchStreet;
   });
 
   $: if (leafletMap) updateMarkers(filteredHouseholds);
 
-  // Debug info
   $: residentsWithGPS = allResidents.filter(r => r.lat && r.lng).length;
   $: residentsWithoutGPS = allResidents.filter(r => !r.lat || !r.lng).length;
 
   onMount(async () => {
-    // Load Leaflet CSS
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
     document.head.appendChild(link);
 
-    // Load Leaflet JS
     await new Promise(/** @param {(value: void) => void} resolve */ (resolve) => {
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
@@ -99,7 +95,6 @@
     });
 
     const L = /** @type {any} */ (window).L;
-
     const pagAsaCenter = [14.8270, 120.2867];
 
     leafletMap = L.map(mapContainer, {
@@ -118,41 +113,29 @@
 
     const pagAsaBounds = L.latLngBounds([14.8240, 120.2835], [14.8305, 120.2900]);
     L.rectangle(pagAsaBounds, {
-      color: '#2563eb',
-      weight: 2,
-      dashArray: '6 4',
-      fillColor: '#2563eb',
-      fillOpacity: 0.04,
+      color: '#2563eb', weight: 2, dashArray: '6 4',
+      fillColor: '#2563eb', fillOpacity: 0.04,
     }).addTo(leafletMap);
 
     L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
 
-    // Load households and residents
     try {
       const { db } = await import('$lib/firebase');
       const { collection, query, where, onSnapshot } = await import('firebase/firestore');
 
-      // Load all approved residents
       unsubs.push(onSnapshot(
         query(collection(db, 'residents'), where('status', '==', 'approved')),
         snap => {
           allResidents = snap.docs.map(d => {
             const data = d.data();
-            return /** @type {any} */ ({ 
-              id: d.id, 
-              category: getCategory(data), 
-              ...data 
-            });
+            return /** @type {any} */ ({ id: d.id, category: getCategory(data), ...data });
           });
-          
+
           console.log('📊 Total residents loaded:', allResidents.length);
           console.log('📍 Residents with GPS:', allResidents.filter(r => r.lat && r.lng).length);
           console.log('❌ Residents without GPS:', allResidents.filter(r => !r.lat && !r.lng).length);
-          
-          if (allResidents.length > 0) {
-            console.log('Sample resident data:', allResidents[0]);
-          }
-          
+          if (allResidents.length > 0) console.log('Sample resident data:', allResidents[0]);
+
           groupResidentsByHousehold();
           loading = false;
         },
@@ -174,16 +157,14 @@
     if (leafletMap) leafletMap.remove();
   });
 
-  // ── Group residents by household ───────────────────────
   function groupResidentsByHousehold() {
     const householdMap = new SvelteMap();
 
     allResidents.forEach(resident => {
       const householdId = resident.householdId || resident.qrId || `standalone_${resident.id}`;
-      
       const lat = resident.lat ?? resident.latitude ?? resident.gpsLat;
       const lng = resident.lng ?? resident.longitude ?? resident.gpsLng;
-      
+
       if (!householdMap.has(householdId)) {
         householdMap.set(householdId, {
           id: householdId,
@@ -193,18 +174,13 @@
           zone: resident.zone || resident.purok || '',
           address: resident.address || '',
           landmark: resident.landmark || '',
-          lat: lat,
-          lng: lng,
+          lat, lng,
           residents: [],
         });
       } else {
         const household = householdMap.get(householdId);
-        if (household && !household.lat && lat) {
-          household.lat = lat;
-        }
-        if (household && !household.lng && lng) {
-          household.lng = lng;
-        }
+        if (household && !household.lat && lat) household.lat = lat;
+        if (household && !household.lng && lng) household.lng = lng;
       }
 
       householdMap.get(householdId)?.residents.push(resident);
@@ -212,55 +188,45 @@
 
     const allHouseholds = Array.from(householdMap.values());
     households = allHouseholds.filter(h => h.lat && h.lng);
-    
+
     console.log('🏠 Total households:', allHouseholds.length);
     console.log('📍 Households with GPS:', households.length);
     console.log('❌ Households without GPS:', allHouseholds.filter(h => !h.lat || !h.lng).length);
-    
-    const noGPS = allHouseholds.filter(h => !h.lat || !h.lng);
-    if (noGPS.length > 0) {
-      console.log('Households missing GPS:', noGPS);
-    }
   }
 
-/** @param {string} houseNo @param {boolean} isSelected @param {number} count */
-function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0) {
-  const L = /** @type {any} */ (window).L;
-  const label = houseNo?.trim().slice(0, 6) || '?'; // max 6 chars to fit
-  const size  = isSelected ? 52 : 44;
-  const pinColor  = isSelected ? '#1d4ed8' : '#2563eb';
-  const textSize  = label.length <= 3 ? 10 : label.length <= 5 ? 8 : 7;
+  /** @param {string} houseNo @param {boolean} isSelected @param {number} count */
+  function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0) {
+    const L = /** @type {any} */ (window).L;
+    const label = houseNo?.trim().slice(0, 6) || '?';
+    const size = isSelected ? 52 : 44;
+    const pinColor = isSelected ? '#1d4ed8' : '#2563eb';
+    const textSize = label.length <= 3 ? 10 : label.length <= 5 ? 8 : 7;
 
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 14}" viewBox="0 0 44 58">
-      <filter id="sh" x="-30%" y="-20%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="rgba(0,0,0,0.22)"/>
-      </filter>
-      <!-- Pin body -->
-      <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z"
-        fill="${pinColor}" filter="url(#sh)"
-        ${isSelected ? 'stroke="white" stroke-width="2"' : ''}/>
-      <!-- White circle background for label -->
-      <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
-      <!-- House number text -->
-      <text x="22" y="22" text-anchor="middle"
-        fill="${pinColor}" font-size="${textSize}" font-weight="800"
-        font-family="Inter,Arial,sans-serif">${label}</text>
-      <!-- Resident count badge -->
-      ${count > 1 ? `
-        <circle cx="34" cy="8" r="8" fill="#dc2626" stroke="white" stroke-width="1.5"/>
-        <text x="34" y="11.5" text-anchor="middle" fill="white" font-size="8" font-weight="800" font-family="Arial">${count}</text>
-      ` : ''}
-    </svg>`;
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size + 14}" viewBox="0 0 44 58">
+        <filter id="sh" x="-30%" y="-20%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="rgba(0,0,0,0.22)"/>
+        </filter>
+        <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z"
+          fill="${pinColor}" filter="url(#sh)"
+          ${isSelected ? 'stroke="white" stroke-width="2"' : ''}/>
+        <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
+        <text x="22" y="22" text-anchor="middle"
+          fill="${pinColor}" font-size="${textSize}" font-weight="800"
+          font-family="Inter,Arial,sans-serif">${label}</text>
+        ${count > 1 ? `
+          <circle cx="34" cy="8" r="8" fill="#dc2626" stroke="white" stroke-width="1.5"/>
+          <text x="34" y="11.5" text-anchor="middle" fill="white" font-size="8" font-weight="800" font-family="Arial">${count}</text>
+        ` : ''}
+      </svg>`;
 
-  return L.divIcon({
-    html: svg,
-    className: '',
-    iconSize:   [size, size + 14],
-    iconAnchor: [size / 2, size + 14],
-    popupAnchor: [0, -(size + 14)],
-  });
-}
+    return L.divIcon({
+      html: svg, className: '',
+      iconSize:   [size, size + 14],
+      iconAnchor: [size / 2, size + 14],
+      popupAnchor: [0, -(size + 14)],
+    });
+  }
 
   /** @param {any[]} list */
   function updateMarkers(list) {
@@ -268,17 +234,11 @@ function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0) {
     markers.forEach(m => m.remove());
     markers = [];
 
-    console.log('🗺️ Updating markers for', list.length, 'households');
-
     list.forEach(h => {
-      if (!h.lat || !h.lng) {
-        console.warn('Household missing coordinates:', h);
-        return;
-      }
+      if (!h.lat || !h.lng) return;
+      const isSelected = selectedHousehold?.id === h.id;
+      const icon = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.length);
 
-const isSelected = selectedHousehold?.id === h.id;
-const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.length);
-      
       try {
         const marker = L.marker([h.lat, h.lng], { icon })
           .addTo(leafletMap)
@@ -286,19 +246,13 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
 
         const tooltipText = `${h.houseNo || ''} ${h.street || h.address}`.trim() || 'Household';
         marker.bindTooltip(tooltipText, {
-          permanent: false,
-          direction: 'top',
-          offset: [0, -10],
-          className: 'map-label'
+          permanent: false, direction: 'top', offset: [0, -10], className: 'map-label'
         });
-
         markers.push(marker);
       } catch (err) {
-        console.error('Error creating marker for household:', h, err);
+        console.error('Error creating marker:', h, err);
       }
     });
-
-    console.log('✅ Created', markers.length, 'markers');
   }
 
   /** @param {any} h */
@@ -310,9 +264,7 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
   }
 
   /** @param {any} r */
-  function openProfile(r) {
-    profileResident = r;
-  }
+  function openProfile(r) { profileResident = r; }
 
   /** @param {{ detail: { id: string, status: string } }} e */
   function handleStatusChange(e) {
@@ -324,7 +276,6 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
     groupResidentsByHousehold();
   }
 
-  // ── Category counts for selected household ────────────
   $: categoryCounts = selectedHouseholdResidents.reduce((acc, r) => {
     acc[r.category] = (acc[r.category] || 0) + 1;
     return acc;
@@ -334,27 +285,18 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
 <svelte:head>
   <style>
     .map-label {
-      background: white !important;
-      border: 1px solid #e2e8f0 !important;
-      border-radius: 6px !important;
-      padding: 2px 7px !important;
-      font-family: 'Inter', sans-serif !important;
-      font-size: 11px !important;
-      font-weight: 700 !important;
-      color: #334155 !important;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.10) !important;
-      white-space: nowrap !important;
+      background: white !important; border: 1px solid #e2e8f0 !important;
+      border-radius: 6px !important; padding: 2px 7px !important;
+      font-family: 'Inter', sans-serif !important; font-size: 11px !important;
+      font-weight: 700 !important; color: #334155 !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.10) !important; white-space: nowrap !important;
     }
     .map-label::before { display: none !important; }
-    .leaflet-control-zoom {
-      border: none !important;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
-    }
+    .leaflet-control-zoom { border: none !important; box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important; }
     .leaflet-control-zoom a {
-      width: 32px !important; height: 32px !important;
-      line-height: 32px !important; font-size: 16px !important;
-      border-radius: 8px !important; margin-bottom: 4px !important;
-      color: #334155 !important;
+      width: 32px !important; height: 32px !important; line-height: 32px !important;
+      font-size: 16px !important; border-radius: 8px !important;
+      margin-bottom: 4px !important; color: #334155 !important;
     }
   </style>
 </svelte:head>
@@ -410,14 +352,14 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
         {#if residentsWithoutGPS > 0}
           <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             <p class="text-amber-800 text-xs font-semibold">
-              ⚠️ {residentsWithoutGPS} residents don't have GPS coordinates. Make sure residents enable location permissions when taking house photos.
+              ⚠️ {residentsWithoutGPS} residents don't have GPS coordinates.
             </p>
           </div>
         {/if}
       </div>
     {/if}
 
-    <!-- Search + Zone filter -->
+    <!-- Search + Street filter -->
     <div class="flex gap-3 flex-wrap">
       <div class="relative flex-1 min-w-48">
         <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -426,15 +368,14 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
         <input bind:value={searchQuery} type="text" placeholder="Search household or resident..."
           class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm" />
       </div>
-
-      <div class="flex gap-2">
-        {#each zones as z (z)}
-          <button type="button" on:click={() => filterZone = z}
+      <div class="flex gap-2 flex-wrap">
+        {#each streets as s (s)}
+          <button type="button" on:click={() => filterStreet = s}
             class="text-sm font-bold px-4 py-1.5 rounded-full border transition-all
-                   {filterZone === z
+                   {filterStreet === s
                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                      : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}">
-            {z}
+            {s}
           </button>
         {/each}
       </div>
@@ -472,12 +413,8 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
               </svg>
               <div>
                 <p class="font-bold text-amber-900 mb-2">No GPS Coordinates Found</p>
-                <p class="text-sm text-amber-800 mb-3">
-                  {allResidents.length} resident(s) loaded but none have GPS coordinates.
-                </p>
-                <p class="text-xs text-amber-700">
-                  <strong>To fix this:</strong> Make sure residents enable location permissions when taking house photos during registration.
-                </p>
+                <p class="text-sm text-amber-800 mb-3">{allResidents.length} resident(s) loaded but none have GPS coordinates.</p>
+                <p class="text-xs text-amber-700"><strong>To fix:</strong> Residents must enable location permissions during registration.</p>
               </div>
             </div>
           </div>
@@ -486,34 +423,32 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
 
       <div bind:this={mapContainer} class="absolute inset-0 z-0"></div>
 
-<!-- Legend -->
-<div class="absolute bottom-4 left-4 z-10 bg-white rounded-xl shadow-md border border-slate-100 px-4 py-3">
-  <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Map Legend</p>
-  <div class="space-y-1.5">
-    <div class="flex items-center gap-2">
-      <svg class="w-4 h-5 shrink-0" viewBox="0 0 44 58">
-        <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z" fill="#2563eb"/>
-        <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
-        <text x="22" y="22" text-anchor="middle" fill="#2563eb" font-size="9" font-weight="800" font-family="Arial">48</text>
-      </svg>
-      <span class="text-xs font-semibold text-slate-600">House number on pin</span>
-    </div>
-    <div class="flex items-center gap-2">
-      <div class="relative w-4 h-4">
-        <div class="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
-          <span class="text-white text-[0.5rem] font-bold">3</span>
+      <!-- Legend -->
+      <div class="absolute bottom-4 left-4 z-10 bg-white rounded-xl shadow-md border border-slate-100 px-4 py-3">
+        <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Map Legend</p>
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-5 shrink-0" viewBox="0 0 44 58">
+              <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z" fill="#2563eb"/>
+              <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
+              <text x="22" y="22" text-anchor="middle" fill="#2563eb" font-size="9" font-weight="800" font-family="Arial">48</text>
+            </svg>
+            <span class="text-xs font-semibold text-slate-600">House number on pin</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
+              <span class="text-white text-[0.5rem] font-bold">3</span>
+            </div>
+            <span class="text-xs font-semibold text-slate-600">Badge = resident count</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-5 flex items-center justify-center">
+              <div class="w-3.5 h-3.5 rounded-full bg-blue-700 ring-2 ring-white ring-offset-1"></div>
+            </div>
+            <span class="text-xs font-semibold text-slate-600">Darker = selected</span>
+          </div>
         </div>
       </div>
-      <span class="text-xs font-semibold text-slate-600">Badge = resident count</span>
-    </div>
-    <div class="flex items-center gap-2">
-      <div class="w-4 h-5 flex items-center justify-center">
-        <div class="w-3.5 h-3.5 rounded-full bg-blue-700 ring-2 ring-white ring-offset-1"></div>
-      </div>
-      <span class="text-xs font-semibold text-slate-600">Darker = selected</span>
-    </div>
-  </div>
-</div>
 
       <!-- Count badge -->
       <div class="absolute top-3 right-3 z-10 bg-white rounded-lg shadow-sm border border-slate-100 px-3 py-1.5 flex items-center gap-1.5">
@@ -530,10 +465,8 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
         <div class="px-4 py-3 border-b border-slate-100">
           <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase">Selected Household</p>
         </div>
-
         {#if selectedHousehold}
           <div class="p-4 flex flex-col gap-3">
-            <!-- Household info -->
             <div class="flex items-center gap-3">
               <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-sm"
                 style="background:{getHouseholdMarkerColor(selectedHouseholdResidents)};">
@@ -543,10 +476,9 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
               </div>
               <div class="min-w-0">
                 <p class="font-nunito font-extrabold text-slate-800 text-sm leading-tight">{selectedHousehold.houseNo} {selectedHousehold.street}</p>
-                <p class="text-xs text-slate-400 mt-0.5">{selectedHousehold.zone} · {selectedHouseholdResidents.length} resident{selectedHouseholdResidents.length !== 1 ? 's' : ''}</p>
+                <p class="text-xs text-slate-400 mt-0.5">{selectedHousehold.street} · {selectedHouseholdResidents.length} resident{selectedHouseholdResidents.length !== 1 ? 's' : ''}</p>
               </div>
             </div>
-
             {#if selectedHousehold.address}
               <div class="flex items-start gap-1.5 text-slate-500">
                 <svg class="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24">
@@ -555,8 +487,6 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
                 <span class="text-xs">{selectedHousehold.address}</span>
               </div>
             {/if}
-
-            <!-- Category breakdown -->
             <div class="bg-slate-50 rounded-xl px-3 py-2">
               <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Household Composition</p>
               <div class="space-y-1">
@@ -569,8 +499,6 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
                 {/each}
               </div>
             </div>
-
-            <!-- Residents list -->
             <div class="border-t border-slate-100 pt-3">
               <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Residents ({selectedHouseholdResidents.length})</p>
               <div class="space-y-2 max-h-64 overflow-y-auto">
@@ -604,16 +532,16 @@ const icon       = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.
         {/if}
       </div>
 
-      <!-- Zone summary -->
+      <!-- Street Distribution (was Zone Distribution) -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-100">
-          <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase">Zone Distribution</p>
+          <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase">Street Distribution</p>
         </div>
         <div class="p-4 space-y-2">
-          {#each zones.slice(1) as z (z)}
-            {@const count = households.filter(h => h.zone === z).length}
+          {#each streets.slice(1) as s (s)}
+            {@const count = households.filter(h => h.street === s).length}
             <div class="flex items-center justify-between">
-              <span class="text-xs font-semibold text-slate-600">{z}</span>
+              <span class="text-xs font-semibold text-slate-600 truncate max-w-32">{s}</span>
               <div class="flex items-center gap-2">
                 <div class="h-1.5 rounded-full bg-blue-100 w-20 overflow-hidden">
                   <div class="h-full rounded-full bg-blue-500 transition-all"

@@ -35,7 +35,6 @@
     'Murphy Street',
     'Natividad Street',
     'Burgos Street',
-    'Cladiola Street',
     'East 12th Street',
     'Perimeter Road',
     'Bonifacio Street',

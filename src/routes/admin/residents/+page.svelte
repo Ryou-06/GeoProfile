@@ -4,7 +4,6 @@
   import { SvelteSet } from 'svelte/reactivity';
   import ResidentProfileModal from '$lib/components/ResidentProfileModal.svelte';
 
-  // ── Types ──────────────────────────────────────────────
   type Category = 'Regular' | 'PWD' | 'Senior' | 'Single Parent';
   type Status   = 'pending' | 'approved' | 'rejected';
 
@@ -16,6 +15,7 @@
     middleName?: string;
     sector: string;
     zone: string;
+    street?: string;
     purok?: string;
     category: Category;
     isPWD: boolean;
@@ -37,31 +37,27 @@
     encodedBy?: string;
     qrId?: string;
     houseNo?: string;
-    street?: string;
   }
 
-  // ── State ──────────────────────────────────────────────
   let residents: Resident[] = [];
   let loading   = true;
   let loadError = '';
 
   let searchQuery  = '';
-  let filterZone   = 'All Zones';
+  let filterStreet = 'All Streets';
   let filterStatus = 'All Status';
   let filterSector = 'All Sectors';
 
   let selected  = new SvelteSet<string>();
   let selectAll = false;
 
-  let profileResident: Resident | null = null;  // ← drives the modal
-
+  let profileResident: Resident | null = null;
   let unsubs: (() => void)[] = [];
 
-  const zones    = ['All Zones',   'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
+  const streets  = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
   const statuses = ['All Status',  'Pending', 'Approved', 'Rejected'];
   const sectors  = ['All Sectors', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
-  // ── Firebase ───────────────────────────────────────────
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const initFilter = urlParams.get('filter');
@@ -98,21 +94,19 @@
 
   onDestroy(() => unsubs.forEach(u => u()));
 
-  // ── Filtered list ─────────────────────────────────────
   $: filtered = residents.filter(r => {
     const q = searchQuery.toLowerCase();
     const matchSearch = !q
       || r.name?.toLowerCase().includes(q)
-      || r.zone?.toLowerCase().includes(q)
+      || r.street?.toLowerCase().includes(q)
       || r.category?.toLowerCase().includes(q)
       || r.address?.toLowerCase().includes(q);
-    const matchZone   = filterZone   === 'All Zones'   || r.zone   === filterZone;
+    const matchStreet = filterStreet === 'All Streets' || r.street === filterStreet;
     const matchStatus = filterStatus === 'All Status'  || r.status === filterStatus.toLowerCase();
     const matchSector = filterSector === 'All Sectors' || r.sector === filterSector;
-    return matchSearch && matchZone && matchStatus && matchSector;
+    return matchSearch && matchStreet && matchStatus && matchSector;
   });
 
-  // ── Select ─────────────────────────────────────────────
   function toggleSelectAll() {
     selectAll = !selectAll;
     if (selectAll) filtered.forEach(r => selected.add(r.id));
@@ -126,15 +120,12 @@
     selectAll = selected.size === filtered.length;
   }
 
-  // ── When modal fires statusChange, sync to the list ───
   function handleStatusChange(e: CustomEvent<{ id: string; status: string }>) {
     const { id, status } = e.detail;
     residents = residents.map(r => r.id === id ? { ...r, status: status as Status } : r);
-    // Also update the open modal so badge reflects change immediately
     if (profileResident?.id === id) profileResident = { ...profileResident, status: status as Status };
   }
 
-  // ── Helpers ───────────────────────────────────────────
   function getInitials(r: Resident) {
     if (r.firstName && r.lastName) return `${r.firstName[0]}${r.lastName[0]}`.toUpperCase();
     return r.name?.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() ?? '??';
@@ -154,16 +145,13 @@
   };
 </script>
 
-<!-- ═══════════════════════════ PAGE ═══════════════════════════ -->
 <div class="min-h-screen bg-slate-100 font-inter p-6 flex flex-col gap-5">
 
-  <!-- Header -->
   <div>
     <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Residents</h1>
     <p class="text-sm text-slate-500 mt-0.5">Review all records submitted by staff</p>
   </div>
 
-  <!-- Error -->
   {#if loadError}
     <div class="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 rounded-xl">
       <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -173,19 +161,18 @@
     </div>
   {/if}
 
-  <!-- Search + filters -->
   <div class="flex gap-3 flex-wrap items-center">
     <div class="relative flex-1 min-w-55 max-w-lg">
       <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
       </svg>
-      <input bind:value={searchQuery} type="text" placeholder="Search by name, zone, or category..."
+      <input bind:value={searchQuery} type="text" placeholder="Search by name, street, or category..."
         class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm" />
     </div>
-<select bind:value={filterStatus}
-  class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
-  {#each statuses as s (s)}<option>{s}</option>{/each}
-</select>
+    <select bind:value={filterStatus}
+      class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
+      {#each statuses as s (s)}<option>{s}</option>{/each}
+    </select>
     <select bind:value={filterSector}
       class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
       {#each sectors as s (s)}<option>{s}</option>{/each}
@@ -200,18 +187,17 @@
     </button>
   </div>
 
-  <!-- Zone tabs -->
+  <!-- Street tabs -->
   <div class="flex gap-2 flex-wrap">
-    {#each zones as z (z)}
-      <button type="button" on:click={() => filterZone = z}
+    {#each streets as s (s)}
+      <button type="button" on:click={() => filterStreet = s}
         class="text-sm font-bold px-4 py-1.5 rounded-full border transition-all
-          {filterZone === z ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}">
-        {z}
+          {filterStreet === s ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600'}">
+        {s}
       </button>
     {/each}
   </div>
 
-  <!-- Table -->
   <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
     <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
       <div class="flex items-center gap-2">
@@ -243,7 +229,7 @@
             </th>
             <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Name</th>
             <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Category</th>
-            <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Zone</th>
+            <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Street</th>
             <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Status</th>
             <th class="px-3 py-3 text-left text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Action</th>
           </tr>
@@ -255,7 +241,7 @@
                 <td class="px-5 py-4"><div class="w-4 h-4 bg-slate-200 rounded"></div></td>
                 <td class="px-3 py-4"><div class="h-3 bg-slate-200 rounded w-32"></div></td>
                 <td class="px-3 py-4"><div class="h-5 bg-slate-100 rounded-full w-16"></div></td>
-                <td class="px-3 py-4"><div class="h-3 bg-slate-200 rounded w-14"></div></td>
+                <td class="px-3 py-4"><div class="h-3 bg-slate-200 rounded w-24"></div></td>
                 <td class="px-3 py-4"><div class="h-5 bg-slate-100 rounded-full w-16"></div></td>
                 <td class="px-3 py-4"><div class="h-7 bg-slate-200 rounded-lg w-20"></div></td>
               </tr>
@@ -272,8 +258,7 @@
             </tr>
           {:else}
             {#each filtered as r (r.id)}
-              <tr class="hover:bg-blue-50/40 transition-colors cursor-pointer"
-                on:click={() => profileResident = r}>
+              <tr class="hover:bg-blue-50/40 transition-colors cursor-pointer" on:click={() => profileResident = r}>
                 <td class="px-5 py-3.5" on:click|stopPropagation>
                   <input type="checkbox" checked={selected.has(r.id)} on:change={() => toggleSelect(r.id)}
                     class="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer" />
@@ -290,7 +275,7 @@
                     {r.category}
                   </span>
                 </td>
-                <td class="px-3 py-3.5 text-slate-500 font-medium">{r.zone ?? '—'}</td>
+                <td class="px-3 py-3.5 text-slate-500 font-medium text-xs">{r.street ?? '—'}</td>
                 <td class="px-3 py-3.5">
                   <span class="text-xs font-bold px-2.5 py-1 rounded-full {statusStyle[r.status] ?? 'bg-slate-100 text-slate-500'} capitalize">
                     {r.status}
@@ -320,7 +305,6 @@
   </div>
 </div>
 
-<!-- ── Shared profile modal ── -->
 <ResidentProfileModal
   resident={profileResident}
   on:close={() => profileResident = null}
