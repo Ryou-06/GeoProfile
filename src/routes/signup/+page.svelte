@@ -1,5 +1,5 @@
 <!-- src/routes/signup/+page.svelte -->
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
 
   onMount(async () => {
@@ -13,7 +13,8 @@
         try {
           const snap = await getDoc(doc(db, 'users', user.uid));
           if (snap.exists()) {
-            const r = snap.data().role;
+            const data = snap.data() as { role?: string };
+            const r = data?.role;
             window.location.href = r === 'admin' ? '/admin/dashboard' : '/staff/dashboard';
           }
         } catch { /* non-critical */ }
@@ -21,53 +22,136 @@
     } catch { /* non-critical */ }
   });
 
-  let name     = '';
-  let email    = '';
-  let position = '';
-  let password = '';
-  let confirm  = '';
-  let role     = 'staff';
-  let showPass = false;
-  let showConf = false;
-  let loading  = false;
-  let errorMsg = '';
-  let success  = false;
+let username: string = '';
+let name: string = '';
+let position: string = '';
+let password: string = '';
+let confirm: string = '';
 
-  const adminPositions = ['Barangay Captain', 'Barangay Secretary', 'Barangay Treasurer', 'IT Officer / Encoder'];
-  const staffPositions = ['Barangay Kagawad', 'Barangay Tanod', 'Health Worker', 'IT Officer / Encoder'];
+let showPass: boolean = false;
+let showConf: boolean = false;
+let loading: boolean = false;
+let errorMsg: string = '';
+let success: boolean = false;
 
-  $: if (role) position = '';
-  $: positions = role === 'admin' ? adminPositions : staffPositions;
+let usernameChecking: boolean = false;
+let usernameAvailable: boolean | null = null;
+
+// ✅ Proper timeout typing
+let usernameTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const adminPositions: string[] = [
+  'Barangay Captain',
+  'Barangay Secretary',
+  'Barangay Treasurer',
+  'IT Officer / Encoder'
+];
+
+  // Username validation and availability check
+  async function checkUsername(): Promise<void> {
+    if (!username.trim() || username.length < 3) {
+      usernameAvailable = null;
+      return;
+    }
+
+    // Validate format
+    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!usernameRegex.test(username)) {
+      usernameAvailable = false;
+      return;
+    }
+
+    usernameChecking = true;
+    try {
+      const { db } = await import('$lib/firebase');
+      const { doc, getDoc } = await import('firebase/firestore');
+      
+      const usernameDoc = await getDoc(
+  doc(db, 'usernames', username.toLowerCase().trim())
+);
+      usernameAvailable = !usernameDoc.exists();
+    } catch {
+      usernameAvailable = null;
+    }
+    usernameChecking = false;
+  }
+
+$: if (username) {
+  if (usernameTimeout) clearTimeout(usernameTimeout);
+
+  usernameTimeout = setTimeout(() => {
+    checkUsername();
+  }, 500);
+}
 
   async function handleSignup() {
     errorMsg = '';
-    if (!name.trim())        { errorMsg = 'Please enter your full name.'; return; }
-    if (!position)           { errorMsg = 'Please select your position.'; return; }
-    if (!email.trim())       { errorMsg = 'Please enter your email address.'; return; }
-    if (!password)           { errorMsg = 'Please enter a password.'; return; }
+    
+    // Validate username format
+    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!username.trim()) { errorMsg = 'Please enter a username.'; return; }
+    if (username.length < 3) { errorMsg = 'Username must be at least 3 characters.'; return; }
+    if (username.length > 20) { errorMsg = 'Username must be 20 characters or less.'; return; }
+    if (!usernameRegex.test(username)) { errorMsg = 'Username can only contain letters, numbers, underscores, and dashes.'; return; }
+    
+    // Check reserved usernames
+    const reserved = ['admin', 'root', 'system', 'administrator', 'superuser', 'moderator'];
+    if (reserved.includes(username.toLowerCase())) { errorMsg = 'This username is reserved. Please choose another.'; return; }
+    
+    if (!name.trim()) { errorMsg = 'Please enter your full name.'; return; }
+    if (!position) { errorMsg = 'Please select your position.'; return; }
+    if (!password) { errorMsg = 'Please enter a password.'; return; }
     if (password.length < 8) { errorMsg = 'Password must be at least 8 characters.'; return; }
     if (password !== confirm) { errorMsg = 'Passwords do not match.'; return; }
+    
     loading = true;
+    
     try {
       const { auth } = await import('$lib/firebase');
       const { db }   = await import('$lib/firebase');
       const { createUserWithEmailAndPassword, updateProfile } = await import('firebase/auth');
-      const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
-      const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const { doc, setDoc, getDoc, serverTimestamp } = await import('firebase/firestore');
+      
+      // Check if username is already taken
+      const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase().trim()));
+      if (usernameDoc.exists()) {
+        errorMsg = 'This username is already taken. Please choose another.';
+        loading = false;
+        return;
+      }
+      
+      // Auto-generate email from username
+      const email = `${username.toLowerCase().trim()}@admin.geoprofile.local`;
+      
+      // Create Firebase Auth user
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: name.trim() });
+      
+      // Store user document
       await setDoc(doc(db, 'users', credential.user.uid), {
-        name: name.trim(), email: email.trim(), position, role,
+        username: username.toLowerCase().trim(),
+        name: name.trim(),
+        email: email,
+        position,
+        role: 'admin',
         createdAt: serverTimestamp(),
       });
+      
+      // Store username mapping for login lookup
+      await setDoc(doc(db, 'usernames', username.toLowerCase().trim()), {
+        email: email,
+        uid: credential.user.uid,
+      });
+      
       success = true;
       setTimeout(() => {
-        window.location.href = role === 'admin' ? '/admin/dashboard' : '/staff/dashboard';
+        window.location.href = '/admin/dashboard';
       }, 2000);
     } catch (e) {
-      const code = /** @type {any} */ (e)?.code ?? '';
+      const code = (e as { code?: string })?.code ?? '';
       switch (code) {
-        case 'auth/email-already-in-use': errorMsg = 'This email is already registered. Try logging in.'; break;
-        case 'auth/invalid-email':        errorMsg = 'Please enter a valid email address.'; break;
+        case 'auth/email-already-in-use': errorMsg = 'This username is already registered.'; break;
+        case 'auth/invalid-email':        errorMsg = 'Invalid username format.'; break;
         case 'auth/weak-password':        errorMsg = 'Password is too weak. Use at least 8 characters.'; break;
         default:                          errorMsg = 'Something went wrong. Please try again.';
       }
@@ -76,7 +160,7 @@
   }
 
   /** @param {KeyboardEvent} e */
-  function handleKeydown(e) { if (e.key === 'Enter') handleSignup(); }
+  function handleKeydown(e: KeyboardEvent) { if (e.key === 'Enter') handleSignup(); }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -110,49 +194,18 @@
       <!-- Card header -->
       <div class="mb-6 text-center">
         <p class="text-[0.65rem] font-bold tracking-widest uppercase text-slate-400 mb-0.5">Barangay Pag-Asa</p>
-        <h2 class="font-nunito text-2xl font-extrabold text-slate-700">Create Account</h2>
+        <h2 class="font-nunito text-2xl font-extrabold text-slate-700">Admin Registration</h2>
       </div>
 
-      <!-- Role toggle -->
-      <div class="flex gap-2 mb-5 p-1 bg-slate-100 rounded-2xl">
-        <button type="button" on:click={() => role = 'staff'}
-          class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200
-                 {role === 'staff' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          Brgy. Staff
-        </button>
-        <button type="button" on:click={() => role = 'admin'}
-          class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200
-                 {role === 'admin' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          Official (Admin)
-        </button>
+      <!-- Admin info badge -->
+      <div class="mb-5 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+        <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-[0.68rem] text-blue-600 leading-relaxed">
+          For <strong>Barangay Officials</strong> — Captain, Secretary, Treasurer, and IT Officers with full system access. Staff accounts are created by admins.
+        </p>
       </div>
-
-      <!-- Role info badge -->
-      {#if role === 'admin'}
-        <div class="mb-5 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-          <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p class="text-[0.68rem] text-blue-600 leading-relaxed">
-            For <strong>Barangay Officials</strong> — Captain, Secretary, Treasurer, and IT Officers with full system access.
-          </p>
-        </div>
-      {:else}
-        <div class="mb-5 flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
-          <svg class="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <p class="text-[0.68rem] text-emerald-600 leading-relaxed">
-            For <strong>Barangay Staff</strong> — Kagawad, Tanod, Health Workers, and encoders with QR generation and registration access.
-          </p>
-        </div>
-      {/if}
 
       <!-- Error banner -->
       {#if errorMsg}
@@ -163,6 +216,42 @@
           <span>{errorMsg}</span>
         </div>
       {/if}
+
+      <!-- Username -->
+      <div class="mb-4">
+        <label for="username" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">Username</label>
+        <div class="relative">
+          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+          </svg>
+          <input id="username" type="text" bind:value={username} placeholder="admin1" disabled={loading}
+            class="w-full pl-10 pr-10 py-3 rounded-xl border-2 text-slate-700 text-sm placeholder-slate-300 outline-none focus:ring-4 focus:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all
+                   {usernameAvailable === false ? 'border-red-300 bg-red-50 focus:border-red-400 focus:ring-red-100' : usernameAvailable === true ? 'border-green-300 bg-green-50 focus:border-green-400 focus:ring-green-100' : 'border-slate-200 bg-slate-50 focus:border-blue-500 focus:ring-blue-100'}" />
+          {#if usernameChecking}
+            <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+            </svg>
+          {:else if usernameAvailable === true}
+            <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          {:else if usernameAvailable === false}
+            <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          {/if}
+        </div>
+        {#if username.trim() && username.length < 3}
+          <p class="text-[0.65rem] text-slate-400 mt-1.5 ml-1">Username must be at least 3 characters</p>
+        {:else if usernameAvailable === false}
+          <p class="text-[0.65rem] text-red-500 font-semibold mt-1.5 ml-1">✗ Username already taken</p>
+        {:else if usernameAvailable === true}
+          <p class="text-[0.65rem] text-green-500 font-semibold mt-1.5 ml-1">✓ Username available</p>
+        {:else}
+          <p class="text-[0.65rem] text-slate-400 mt-1.5 ml-1">3-20 characters, letters, numbers, _ and -</p>
+        {/if}
+      </div>
 
       <!-- Row 1: Full Name + Position -->
       <div class="grid grid-cols-2 gap-4 mb-4">
@@ -189,7 +278,7 @@
               class="w-full pl-10 pr-8 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all appearance-none cursor-pointer
                      {position === '' ? 'text-slate-300' : 'text-slate-700'}">
               <option value="" disabled selected>Select position</option>
-              {#each positions as pos (pos)}
+              {#each adminPositions as pos (pos)}
                 <option value={pos}>{pos}</option>
               {/each}
             </select>
@@ -200,20 +289,7 @@
         </div>
       </div>
 
-      <!-- Row 2: Email (full width) -->
-      <div class="mb-4">
-        <label for="email" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">Email Address</label>
-        <div class="relative">
-          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-          <input id="email" type="email" bind:value={email} placeholder="yourname@pagasa.gov.ph"
-            autocomplete="username" disabled={loading}
-            class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm placeholder-slate-300 outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all" />
-        </div>
-      </div>
-
-      <!-- Row 3: Password + Confirm -->
+      <!-- Row 2: Password + Confirm -->
       <div class="grid grid-cols-2 gap-4 mb-6">
         <!-- Password -->
         <div>
@@ -265,9 +341,9 @@
       </div>
 
       <!-- Submit button -->
-      <button type="button" on:click={handleSignup} disabled={loading}
+      <button type="button" on:click={handleSignup} disabled={loading || usernameAvailable === false}
         class="w-full flex items-center justify-center gap-2 py-3.5 active:scale-[0.98] text-white font-nunito font-extrabold text-base rounded-2xl shadow-lg disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 transition-all duration-200 cursor-pointer"
-        style="background: linear-gradient(to right, {role === 'admin' ? '#1d4ed8, #3b82f6' : '#059669, #34d399'});">
+        style="background: linear-gradient(to right, #1d4ed8, #3b82f6);">
         {#if loading}
           <svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -278,7 +354,7 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
           </svg>
-          <span>Create {role === 'admin' ? 'Official' : 'Staff'} Account</span>
+          <span>Create Admin Account</span>
         {/if}
       </button>
 
@@ -301,9 +377,8 @@
     <div class="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center px-6"
       style="background: rgba(15,32,96,0.75);">
       <div class="bg-white rounded-3xl px-8 py-10 text-center max-w-xs w-full shadow-2xl animate-pop-in">
-        <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4
-                    {role === 'admin' ? 'bg-blue-100' : 'bg-emerald-100'}">
-          <svg class="w-8 h-8 {role === 'admin' ? 'text-blue-600' : 'text-emerald-600'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-blue-100">
+          <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
@@ -311,7 +386,7 @@
         <p class="text-sm text-slate-500 mb-0.5">Welcome, {name}!</p>
         <p class="text-xs text-slate-400 mb-5">{position} · Barangay Pag-Asa</p>
         <div class="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-          <div class="h-full rounded-full {role === 'admin' ? 'bg-blue-500' : 'bg-emerald-500'}"
+          <div class="h-full rounded-full bg-blue-500"
             style="width: 100%; transition: width 2s ease;"></div>
         </div>
       </div>

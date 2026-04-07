@@ -23,7 +23,7 @@
     } catch { /* non-critical */ }
   });
 
-  let email    = '';
+  let username = '';
   let password = '';
   let role     = 'staff'; // 'staff' | 'admin'
   let showPass = false;
@@ -35,8 +35,8 @@
   async function handleLogin() {
     errorMsg = '';
 
-    if (!email.trim()) { errorMsg = 'Please enter your email address.'; return; }
-    if (!password)     { errorMsg = 'Please enter your password.'; return; }
+    if (!username.trim()) { errorMsg = 'Please enter your username.'; return; }
+    if (!password)        { errorMsg = 'Please enter your password.'; return; }
 
     loading = true;
 
@@ -47,12 +47,22 @@
       const { signInWithEmailAndPassword } = await import('firebase/auth');
       const { doc, getDoc }                = await import('firebase/firestore');
 
-      // 1. Sign in with Firebase Auth
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const uid = credential.user.uid;
+      // 1. Look up username to get email
+      const usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase().trim()));
+      
+      if (!usernameDoc.exists()) {
+        errorMsg = 'Username not found. Please check your username.';
+        loading = false;
+        return;
+      }
 
-      // 2. Read user role from Firestore users collection
-      const userSnap = await getDoc(doc(db, 'users', uid));
+      const { email } = usernameDoc.data();
+
+      // 2. Sign in with Firebase Auth using email
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+
+      // 3. Read user role from Firestore users collection
+      const userSnap = await getDoc(doc(db, 'users', credential.user.uid));
 
       if (!userSnap.exists()) {
         errorMsg = 'Account not found in system. Contact your administrator.';
@@ -65,7 +75,7 @@
       const userData = userSnap.data();
       const firestoreRole = userData.role;
 
-      // 3. Validate selected role matches Firestore role
+      // 4. Validate selected role matches Firestore role
       if (firestoreRole !== role) {
         errorMsg = `This account is registered as ${firestoreRole === 'admin' ? 'Admin' : 'Staff'}. Please select the correct role.`;
         const { signOut } = await import('firebase/auth');
@@ -74,8 +84,8 @@
         return;
       }
 
-      // 4. Success — show overlay then redirect
-      successName = userData.name ?? email;
+      // 5. Success — show overlay then redirect
+      successName = userData.name ?? username;
       success = true;
 
       setTimeout(() => {
@@ -90,7 +100,7 @@
         case 'auth/user-not-found':
         case 'auth/wrong-password':
         case 'auth/invalid-credential':
-          errorMsg = 'Incorrect email or password. Please try again.';
+          errorMsg = 'Incorrect username or password. Please try again.';
           break;
         case 'auth/too-many-requests':
           errorMsg = 'Too many failed attempts. Please try again later.';
@@ -210,20 +220,20 @@
         </div>
       {/if}
 
-      <!-- Email -->
+      <!-- Username -->
       <div class="mb-4">
-        <label for="email" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
-          Username / Email
+        <label for="username" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
+          Username
         </label>
         <div class="relative">
           <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
           <input
-            id="email"
-            type="email"
-            bind:value={email}
-            placeholder="{role === 'admin' ? 'admin' : 'staff'}@pag-asa.gov.ph"
+            id="username"
+            type="text"
+            bind:value={username}
+            placeholder="{role === 'admin' ? 'admin1' : 'staff1'}"
             autocomplete="username"
             disabled={loading}
             class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm placeholder-slate-300 outline-none
@@ -300,7 +310,7 @@
 
       <!-- Sign up link -->
       <p class="text-center text-xs text-slate-400 mt-3">
-        Don't have an account?
+        Admin registration?
         <button type="button" on:click={() => { window.location.href = '/signup'; }}
           class="text-blue-600 font-semibold hover:underline ml-1 bg-transparent border-none cursor-pointer">
           Sign up here
