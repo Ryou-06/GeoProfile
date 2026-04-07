@@ -5,7 +5,7 @@
   import ResidentProfileModal from '$lib/components/ResidentProfileModal.svelte';
 
   type Category = 'Regular' | 'PWD' | 'Senior' | 'Single Parent';
-  type Status   = 'pending' | 'approved' | 'rejected';
+  type Status   = 'pending' | 'approved' | 'declined';
 
   interface Resident {
     id: string;
@@ -55,7 +55,7 @@
   let unsubs: (() => void)[] = [];
 
   const streets  = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
-  const statuses = ['All Status',  'Pending', 'Approved', 'Rejected'];
+  const statuses = ['All Status',  'Pending', 'Approved', 'Declined'];
   const sectors  = ['All Sectors', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
   onMount(async () => {
@@ -141,7 +141,7 @@
   const statusStyle: Record<Status, string> = {
     pending:  'bg-amber-100 text-amber-600',
     approved: 'bg-green-100 text-green-700',
-    rejected: 'bg-red-100 text-red-500',
+    declined: 'bg-red-100 text-red-500',
   };
 </script>
 
@@ -212,7 +212,7 @@
             Approve {selected.size}
           </button>
           <button type="button" class="text-xs font-bold bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg transition-all active:scale-95">
-            Reject {selected.size}
+            Decline {selected.size}
           </button>
         {/if}
         <span class="text-xs text-slate-400 font-semibold">{filtered.length} records</span>

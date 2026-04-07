@@ -24,11 +24,14 @@
     gpsAccuracy?: number;
     photoUrl?: string;
     birthdate?: string;
-    status?: 'pending' | 'approved' | 'rejected';
+    status?: 'pending' | 'approved' | 'declined';
     isPWD?: boolean;
     pwdType?: string;
+    pwdIdProof?: string;
     isSenior?: boolean;
+    seniorIdProof?: string;
     isSingleParent?: boolean;
+    singleParentIdProof?: string;
     submittedAt?: { toDate(): Date } | Date | string;
     encodedBy?: string;
   }
@@ -38,37 +41,74 @@
 
   const dispatch = createEventDispatcher<{
     close: void;
-    statusChange: { id: string; status: 'approved' | 'rejected' };
+    statusChange: { id: string; status: 'approved' | 'declined' };
   }>();
 
   // ── Photo lightbox ─────────────────────────────────────
   let showPhotoLightbox = false;
+  let lightboxSrc = '';
+  let lightboxLabel = '';
 
   // ── Confirm modal ──────────────────────────────────────
   let confirmModal: {
     open: boolean;
-    action: 'approve' | 'reject';
+    action: 'approve' | 'decline';
   } = { open: false, action: 'approve' };
 
   // ── Reactive: close lightbox when resident changes ─────
-  $: if (resident) showPhotoLightbox = false;
+  $: if (resident) { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }
 
   // ── Maps URLs ──────────────────────────────────────────
   $: mapSrc = (resident?.lat && resident?.lng)
     ? `https://maps.google.com/maps?q=${resident.lat},${resident.lng}&z=17&output=embed`
     : null;
 
+  // ── Proof images list (only sectors resident belongs to) ──
+  $: proofImages = (() => {
+    if (!resident) return [];
+    const list: { label: string; src: string; color: string; icon: string }[] = [];
+    if (resident.isPWD)
+      list.push({
+        label: `PWD ID Proof${resident.pwdType ? ` — ${resident.pwdType}` : ''}`,
+        src: resident.pwdIdProof ?? '',
+        color: 'amber',
+        icon: '♿',
+      });
+    if (resident.isSenior)
+      list.push({
+        label: 'Senior Citizen ID Proof',
+        src: resident.seniorIdProof ?? '',
+        color: 'emerald',
+        icon: '🧓',
+      });
+    if (resident.isSingleParent)
+      list.push({
+        label: 'Single Parent ID Proof',
+        src: resident.singleParentIdProof ?? '',
+        color: 'violet',
+        icon: '👤',
+      });
+    return list;
+  })();
+
   // ── Keyboard handler ───────────────────────────────────
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
-      if (showPhotoLightbox) { showPhotoLightbox = false; return; }
+      if (showPhotoLightbox) { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; return; }
       if (confirmModal.open) { confirmModal = { open: false, action: 'approve' }; return; }
       dispatch('close');
     }
   }
 
-  // ── Approve / Reject ───────────────────────────────────
-  function openConfirm(action: 'approve' | 'reject') {
+  // ── Open lightbox for any image ────────────────────────
+  function openLightbox(src: string, label: string) {
+    lightboxSrc = src;
+    lightboxLabel = label;
+    showPhotoLightbox = true;
+  }
+
+  // ── Approve / Decline ───────────────────────────────────
+  function openConfirm(action: 'approve' | 'decline') {
     confirmModal = { open: true, action };
   }
 
@@ -77,7 +117,7 @@
     try {
       const { db }             = await import('$lib/firebase');
       const { updateDoc, doc } = await import('firebase/firestore');
-      const newStatus = confirmModal.action === 'approve' ? 'approved' : 'rejected';
+      const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
       await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
       // Update local copy so badge reflects change immediately
       resident = { ...resident, status: newStatus };
@@ -120,10 +160,22 @@
     blue:    'bg-blue-100 text-blue-700 border border-blue-200',
   };
 
+  const proofBorder: Record<string, string> = {
+    amber:   'border-amber-200 bg-amber-50',
+    emerald: 'border-emerald-200 bg-emerald-50',
+    violet:  'border-violet-200 bg-violet-50',
+  };
+
+  const proofLabel: Record<string, string> = {
+    amber:   'text-amber-700 bg-amber-100 border-amber-200',
+    emerald: 'text-emerald-700 bg-emerald-100 border-emerald-200',
+    violet:  'text-violet-700 bg-violet-100 border-violet-200',
+  };
+
   const statusHero: Record<string, string> = {
     pending:  'bg-amber-400/20 text-amber-200 border border-amber-300/30',
     approved: 'bg-green-400/20 text-green-200 border border-green-300/30',
-    rejected: 'bg-red-400/20 text-red-200 border border-red-300/30',
+    declined: 'bg-red-400/20 text-red-200 border border-red-300/30',
   };
 </script>
 
@@ -179,7 +231,7 @@
                     {/if}
                   </div>
                   <span class="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full shrink-0 {statusHero[resident.status ?? 'pending']}">
-                    {#if resident.status === 'approved'}✓{:else if resident.status === 'rejected'}✗{:else}⏳{/if}
+                    {#if resident.status === 'approved'}✓{:else if resident.status === 'declined'}✗{:else}⏳{/if}
                     {(resident.status ?? 'pending').charAt(0).toUpperCase() + (resident.status ?? 'pending').slice(1)}
                   </span>
                 </div>
@@ -348,7 +400,8 @@
                 House Photo
               </p>
               {#if resident.photoUrl}
-                <button type="button" on:click={() => showPhotoLightbox = true}
+                <button type="button"
+                  on:click={() => openLightbox(resident!.photoUrl ?? '', `🏠 ${resident!.firstName ?? ''} ${resident!.lastName ?? resident!.name} — House Photo`)}
                   class="w-full relative rounded-xl overflow-hidden border border-slate-200 group cursor-zoom-in">
                   <img src={resident.photoUrl} alt="House" class="w-full h-44 object-cover group-hover:brightness-90 transition-all" />
                   <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
@@ -368,6 +421,64 @@
                 </div>
               {/if}
             </div>
+
+            <!-- ══ SECTOR ID PROOF IMAGES ══════════════════════════════ -->
+            <!--
+              Only renders when the resident belongs to at least one
+              sector (PWD, Senior Citizen, Single Parent).
+              Each proof card is colour-coded to match its category badge.
+            -->
+            {#if proofImages.length > 0}
+              <div class="px-6 py-4 space-y-4">
+                <!-- Section header -->
+                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
+                  </svg>
+                  Sector ID Proofs
+                </p>
+
+                {#each proofImages as proof (proof.label)}
+                  <div class="rounded-xl border {proofBorder[proof.color]} overflow-hidden">
+                    <!-- Proof card label row -->
+                    <div class="flex items-center gap-2 px-3 py-2 border-b {proofBorder[proof.color]}">
+                      <span class="text-base leading-none">{proof.icon}</span>
+                      <span class="text-[0.65rem] font-extrabold uppercase tracking-wider {proofLabel[proof.color]} px-2 py-0.5 rounded-full border">
+                        {proof.label}
+                      </span>
+                    </div>
+
+                    <!-- Image or placeholder -->
+                    {#if proof.src}
+                      <button type="button"
+                        on:click={() => openLightbox(proof.src, `${proof.icon} ${proof.label}`)}
+                        class="w-full relative group cursor-zoom-in block">
+                        <img
+                          src={proof.src}
+                          alt={proof.label}
+                          class="w-full h-36 object-cover group-hover:brightness-90 transition-all"
+                        />
+                        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                          <span class="bg-black/50 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-sm">
+                            🔍 Tap to enlarge
+                          </span>
+                        </div>
+                      </button>
+                    {:else}
+                      <!-- Empty state: resident is in this sector but no proof uploaded -->
+                      <div class="w-full h-28 flex flex-col items-center justify-center gap-1.5 text-slate-300 bg-slate-50">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="text-xs font-semibold text-slate-400">No proof submitted</p>
+                        <p class="text-[0.65rem] text-slate-300">Document was not uploaded</p>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            <!-- ══ END SECTOR ID PROOF IMAGES ═════════════════════════ -->
 
           </div>
         </div>
@@ -426,7 +537,7 @@
           <!-- Action buttons -->
           <div class="px-5 py-4 border-t border-slate-100 bg-white shrink-0 space-y-2">
 
-            <!-- Approve / Reject (pending only) -->
+            <!-- Approve / Decline (pending only) -->
             {#if resident.status === 'pending'}
               <div class="flex gap-2">
                 <button type="button" on:click={() => openConfirm('approve')}
@@ -436,12 +547,12 @@
                   </svg>
                   Approve
                 </button>
-                <button type="button" on:click={() => openConfirm('reject')}
+                <button type="button" on:click={() => openConfirm('decline')}
                   class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center gap-1.5">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
                   </svg>
-                  Reject
+                  Decline
                 </button>
               </div>
             {/if}
@@ -480,23 +591,30 @@
 
 
 <!-- ══════════════════ PHOTO LIGHTBOX ═════════════════════════ -->
-{#if showPhotoLightbox && resident?.photoUrl}
+<!--
+  Now shared between house photo AND all sector proof images.
+  lightboxSrc / lightboxLabel are set by openLightbox().
+-->
+{#if showPhotoLightbox && lightboxSrc}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-    on:click={() => showPhotoLightbox = false}>
+    on:click={() => { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }}>
     <div class="relative max-w-lg w-full mx-4" on:click|stopPropagation>
-      <img src={resident.photoUrl} alt="House"
+      <img src={lightboxSrc} alt={lightboxLabel}
         class="w-full rounded-2xl shadow-2xl max-h-[80vh] object-cover" />
-      <button on:click={() => showPhotoLightbox = false}
+      <button
+        on:click={() => { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }}
         class="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-all">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
         </svg>
       </button>
-      <div class="absolute bottom-3 left-3 bg-black/50 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
-        🏠 {resident.firstName ?? ''} {resident.lastName ?? resident.name} — House Photo
-      </div>
+      {#if lightboxLabel}
+        <div class="absolute bottom-3 left-3 bg-black/50 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+          {lightboxLabel}
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -520,13 +638,13 @@
         {/if}
       </div>
       <h3 class="font-nunito font-extrabold text-slate-700 text-lg mb-1">
-        {confirmModal.action === 'approve' ? 'Approve Resident?' : 'Reject Resident?'}
+        {confirmModal.action === 'approve' ? 'Approve Resident?' : 'Decline Resident?'}
       </h3>
       <p class="text-sm text-slate-500 font-semibold mb-1">{resident?.name}</p>
       <p class="text-sm text-slate-400 mb-5">
         {confirmModal.action === 'approve'
           ? 'This resident will be marked as approved and added to the records.'
-          : 'This submission will be rejected and removed from the queue.'}
+          : 'This submission will be declined and removed from the queue.'}
       </p>
       <div class="flex gap-3">
         <button type="button"
@@ -537,7 +655,7 @@
         <button type="button" on:click={confirmAction}
           class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-colors
                  {confirmModal.action === 'approve' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}">
-          {confirmModal.action === 'approve' ? 'Yes, Approve' : 'Yes, Reject'}
+          {confirmModal.action === 'approve' ? 'Yes, Approve' : 'Yes, Decline'}
         </button>
       </div>
     </div>

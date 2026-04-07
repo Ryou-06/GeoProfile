@@ -9,7 +9,7 @@
   let pwds            = 0;
   let singleParents   = 0;
   let pendingCount    = 0;
-  let rejectedCount   = 0;
+  let declinedCount   = 0;
 
   // ── Age groups (computed from birthdate) ──────────────
   let ageGroups = { child: 0, youth: 0, adult: 0, middleAge: 0, senior: 0 };
@@ -229,10 +229,10 @@
           async snap => { pendingCount = snap.size; }
         ));
 
-        // Rejected count
+        // Declined count
         unsubs.push(onSnapshot(
-          query(collection(db, 'residents'), where('status', '==', 'rejected')),
-          async snap => { rejectedCount = snap.size; }
+          query(collection(db, 'residents'), where('status', '==', 'declined')),
+          async snap => { declinedCount = snap.size; }
         ));
 
         // Recent activity feed
@@ -257,7 +257,7 @@
   });
 
   // ── Derived ────────────────────────────────────────────
-  $: totalAll    = totalResidents + pendingCount + rejectedCount;
+  $: totalAll    = totalResidents + pendingCount + declinedCount;
   $: approvalPct = totalAll > 0 ? Math.round((totalResidents / totalAll) * 100) : 0;
 
   $: maxAge   = Math.max(1, ...Object.values(ageGroups));
@@ -290,14 +290,14 @@
   /** @param {string} status */
   function activityDotColor(status) {
     if (status === 'approved') return '#059669';
-    if (status === 'rejected') return '#dc2626';
+    if (status === 'declined') return '#dc2626';
     return '#d97706';
   }
 
   /** @param {string} status */
   function activityLabel(status) {
     if (status === 'approved') return 'Approved';
-    if (status === 'rejected') return 'Rejected';
+    if (status === 'declined') return 'Declined';
     return 'Pending review';
   }
 
@@ -379,8 +379,8 @@
       <p class="mval mval-warn">{pendingCount}</p>
     </div>
     <div class="metric-card">
-      <p class="mlabel">Rejected</p>
-      <p class="mval mval-danger">{rejectedCount}</p>
+      <p class="mlabel">Declined</p>
+      <p class="mval mval-danger">{declinedCount}</p>
     </div>
   </div>
 
@@ -530,7 +530,7 @@
       {/if}
       <div style="margin-top:14px;">
         <button class="go-btn" on:click={() => { window.location.href = '/admin/residents?filter=pending'; }}>
-          Go to Approve / Reject
+          Go to Approve / Decline
           <svg class="ico" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
           </svg>
