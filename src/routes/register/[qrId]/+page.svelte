@@ -1,7 +1,5 @@
 <!-- PUBLIC PWA form — no login required -->
 <!-- src/routes/register/[qrId]/+page.svelte -->
-<!-- ngrok http --domain=overlavishly-unsequential-janean.ngrok-free.dev 5173 - for running in online -->
-
 
 <script>
   import { onMount } from 'svelte';
@@ -17,14 +15,16 @@
   // ── GPS (Enhanced with Better Accuracy) ────────────────
   let gpsLat      = /** @type {number|null} */ (null);
   let gpsLng      = /** @type {number|null} */ (null);
-  let gpsAccuracy = /** @type {number|null} */ (null); // in meters
-  let gpsStatus   = 'pending'; // 'pending' | 'granted' | 'denied' | 'error' | 'optimizing'
+  let gpsAccuracy = /** @type {number|null} */ (null);
+  let gpsStatus   = 'pending'; // pending, optimizing, granted, denied, error
   let gpsAttempt  = 0;
-  let maxGpsRetries = 5;
+  let maxGpsRetries = 8;
   let watchId = /** @type {number|null} */ (null);
   let bestAccuracy = /** @type {number|null} */ (null);
   let gpsMessage = 'Requesting GPS location...';
-  let maxWatchTimeout = /** @type {NodeJS.Timeout|null} */ (null);
+  let maxWatchTimeout = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
+  let lastLocation = /** @type {{lat: number, lng: number, accuracy: number}|null} */ (null);
+  let gpsRetryCount = 0;
 
   // ── Form fields ────────────────────────────────────────
   let firstName    = '';
@@ -36,9 +36,9 @@
   let contactNo    = '';
 
   // ── Address fields ─────────────────────────────────────
-  let houseNo  = '';   // House number, unit, or block — user-entered
-  let street   = '';   // Street — dropdown
-  let purok    = '';   // Purok / Sitio — dropdown
+  let houseNo  = '';
+  let street   = '';
+  let purok    = '';
 
   const streets = [
     'Gordon Avenue',
@@ -56,25 +56,89 @@
   let isSingleParent = false;
   let pwdType        = '';
 
+  // ── Category ID Uploads ────────────────────────────────
+  /** @type {File|null} */
+  let pwdIdFile = null;
+  /** @type {string} */
+  let pwdIdPreview = '';
+  /** @type {File|null} */
+  let seniorIdFile = null;
+  /** @type {string} */
+  let seniorIdPreview = '';
+  /** @type {File|null} */
+  let singleParentIdFile = null;
+  /** @type {string} */
+  let singleParentIdPreview = '';
+
   // ── House photo ────────────────────────────────────────
   /** @type {File|null} */
   let housePhoto        = null;
   /** @type {string} */
   let housePhotoPreview = '';
-  let photoError        = '';
 
   // ── Form state ─────────────────────────────────────────
-  let step      = 1; // 1=personal, 2=categories, 3=photo+confirm
+  let step      = 1;
   let loading   = false;
   let errorMsg  = '';
   let submitted = false;
 
+  // ── Validation state ───────────────────────────────────
+  let fieldErrors = {
+    firstName: '',
+    lastName: '',
+    birthdate: '',
+    sex: '',
+    civilStatus: '',
+    contactNo: '',
+    street: '',
+    pwdType: '',
+    pwdIdFile: '',
+    seniorIdFile: '',
+    singleParentIdFile: '',
+    housePhoto: ''
+  };
+
+  let touchedFields = {
+    firstName: false,
+    lastName: false,
+    birthdate: false,
+    sex: false,
+    civilStatus: false,
+    contactNo: false,
+    street: false,
+    pwdType: false,
+    pwdIdFile: false,
+    seniorIdFile: false,
+    singleParentIdFile: false,
+    housePhoto: false
+  };
+
   // ── Age computed from birthdate ────────────────────────
   $: age = birthdate
-    ? Math.floor((Date.now() - new Date(birthdate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+    ? Math.floor((Date.now() - Date.parse(birthdate)) / (365.25 * 24 * 60 * 60 * 1000))
     : null;
+  
+  // Calculate age in days for minimum age validation
+  $: ageInDays = birthdate
+    ? Math.floor((Date.now() - Date.parse(birthdate)) / (24 * 60 * 60 * 1000))
+    : null;
+  
   // Auto-check Senior if age >= 60
   $: if (age !== null && age >= 60) isSenior = true;
+
+  // Real-time validation triggers
+  $: if (touchedFields.firstName) validateFirstName();
+  $: if (touchedFields.lastName) validateLastName();
+  $: if (touchedFields.birthdate) validateBirthdate();
+  $: if (touchedFields.sex) validateSex();
+  $: if (touchedFields.civilStatus) validateCivilStatus();
+  $: if (touchedFields.contactNo) validateContactNo();
+  $: if (touchedFields.street) validateStreet();
+  $: if (touchedFields.pwdType && isPWD) validatePwdType();
+  $: if (touchedFields.pwdIdFile && isPWD) validatePwdIdFile();
+  $: if (touchedFields.seniorIdFile && isSenior) validateSeniorIdFile();
+  $: if (touchedFields.singleParentIdFile && isSingleParent) validateSingleParentIdFile();
+  $: if (touchedFields.housePhoto) validateHousePhoto();
 
   // ── Full address preview ────────────────────────────────
   $: fullAddress = [houseNo.trim(), street, purok, 'Barangay Pag-Asa', 'Olongapo City', 'Zambales']
@@ -92,117 +156,404 @@
     ? '🟠 Fair (±50m)'
     : '🔴 Poor (>50m)';
 
-  // ── Load household info on mount ───────────────────────
-  onMount(async () => {
-    // Get qrId directly from URL (reactive $: may not be ready in onMount)
-    const currentQrId = window.location.pathname.split('/').pop() ?? '';
+  // ── Senior button disabled state ────────────────────────
+  $: isSeniorDisabled = age === null || age < 60;
 
-    requestGPSEnhanced();
-    if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
-
-    try {
-      const { db } = await import('$lib/firebase');
-      const { collection, query, where, getDocs } = await import('firebase/firestore');
-
-      const snap = await getDocs(
-        query(collection(db, 'households'), where('qrId', '==', currentQrId))
-      );
-
-      if (snap.empty) {
-        householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
-      } else {
-        household = { id: snap.docs[0].id, ...snap.docs[0].data() };
-        // Pre-fill from household if available
-        if (household?.houseNo) houseNo = household.houseNo;
-        if (household?.street)  street  = household.street;
-        if (household?.zone)    purok   = household.zone;
-      }
-    } catch (e) {
-      householdError = 'Could not load household info. Please check your internet connection.';
-      console.error(e);
-    } finally {
-      householdLoading = false;
-    }
-  });
-
-  // ── HELPER: Validate location is realistic ─────────────
-  /**
-   * @param {number} lat
-   * @param {number} lng
-   * @param {number} accuracy
-   * @returns {boolean}
-   */
-  function isValidLocation(lat, lng, accuracy) {
-    // Reject impossible coordinates
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      console.warn('❌ Invalid location: coordinates out of range', { lat, lng });
+  // ── VALIDATION FUNCTIONS ────────────────────────────────
+  function validateFirstName() {
+    if (!firstName.trim()) {
+      fieldErrors.firstName = 'First name is required';
       return false;
     }
-
-    // Reject unrealistic accuracy (>1000m usually means cellular triangulation only)
-    if (accuracy > 1000) {
-      console.warn('❌ Invalid location: accuracy too poor (>1000m)', { accuracy });
+    if (firstName.trim().length < 2) {
+      fieldErrors.firstName = 'First name must be at least 2 characters';
       return false;
     }
-
-    // Reject if we have previous data and this is too far away (>500m jump)
-    if (gpsLat !== null && gpsLng !== null) {
-      const distance = calculateDistance(gpsLat, gpsLng, lat, lng);
-      if (distance > 0.5) { // 0.5 km = 500m
-        console.warn('❌ Invalid location: jumped >500m away', { distance });
-        return false;
-      }
+    if (!/^[a-zA-Z\s\-ñÑ]+$/.test(firstName.trim())) {
+      fieldErrors.firstName = 'First name should only contain letters';
+      return false;
     }
-
+    fieldErrors.firstName = '';
     return true;
   }
 
-  // ── HELPER: Calculate distance between two coordinates ──
-  /**
+  function validateLastName() {
+    if (!lastName.trim()) {
+      fieldErrors.lastName = 'Last name is required';
+      return false;
+    }
+    if (lastName.trim().length < 2) {
+      fieldErrors.lastName = 'Last name must be at least 2 characters';
+      return false;
+    }
+    if (!/^[a-zA-Z\s\-ñÑ]+$/.test(lastName.trim())) {
+      fieldErrors.lastName = 'Last name should only contain letters';
+      return false;
+    }
+    fieldErrors.lastName = '';
+    return true;
+  }
+
+  function validateBirthdate() {
+    if (!birthdate) {
+      fieldErrors.birthdate = 'Birthdate is required';
+      return false;
+    }
+
+    const birthDateMs = Date.parse(birthdate);
+    if (Number.isNaN(birthDateMs)) {
+      fieldErrors.birthdate = 'Invalid birthdate';
+      return false;
+    }
+
+    const nowMs = Date.now();
+    const todayLocal = new Intl.DateTimeFormat('en-CA', {
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(nowMs);
+
+    if (birthDateMs > nowMs) {
+      fieldErrors.birthdate = 'Birthdate cannot be in the future';
+      return false;
+    }
+
+    // Check if birthdate is today
+    if (birthdate === todayLocal) {
+      fieldErrors.birthdate = 'Resident must be at least 1 month old';
+      return false;
+    }
+
+    const calculatedAge = Math.floor((nowMs - birthDateMs) / (365.25 * 24 * 60 * 60 * 1000));
+    const ageInDaysLocal = Math.floor((nowMs - birthDateMs) / (24 * 60 * 60 * 1000));
+
+    if (calculatedAge < 0) {
+      fieldErrors.birthdate = 'Invalid birthdate';
+      return false;
+    }
+
+    // Minimum age requirement: at least 30 days old (approximately 1 month)
+    if (ageInDaysLocal < 30) {
+      fieldErrors.birthdate = 'Resident must be at least 1 month old';
+      return false;
+    }
+
+    if (calculatedAge > 120) {
+      fieldErrors.birthdate = 'Please verify birthdate (age exceeds 120)';
+      return false;
+    }
+
+    fieldErrors.birthdate = '';
+    return true;
+  }
+
+  function validateSex() {
+    if (!sex) {
+      fieldErrors.sex = 'Please select your sex';
+      return false;
+    }
+    fieldErrors.sex = '';
+    return true;
+  }
+
+  function validateCivilStatus() {
+    if (!civilStatus) {
+      fieldErrors.civilStatus = 'Please select your civil status';
+      return false;
+    }
+    fieldErrors.civilStatus = '';
+    return true;
+  }
+
+  function validateContactNo() {
+    const cleaned = contactNo.trim().replace(/\s/g, '');
+    if (cleaned && !/^09\d{9}$/.test(cleaned)) {
+      fieldErrors.contactNo = 'Enter valid 11-digit PH number (e.g., 09123456789)';
+      return false;
+    }
+    if (cleaned && cleaned.length !== 11) {
+      fieldErrors.contactNo = 'Contact number must be exactly 11 digits';
+      return false;
+    }
+    fieldErrors.contactNo = '';
+    return true;
+  }
+
+  function validateStreet() {
+    if (!street) {
+      fieldErrors.street = 'Please select a street';
+      return false;
+    }
+    fieldErrors.street = '';
+    return true;
+  }
+
+  function validatePwdType() {
+    if (isPWD && !pwdType) {
+      fieldErrors.pwdType = 'Please select type of disability';
+      return false;
+    }
+    fieldErrors.pwdType = '';
+    return true;
+  }
+
+  function validatePwdIdFile() {
+    if (isPWD && !pwdIdFile) {
+      fieldErrors.pwdIdFile = 'Please upload your PWD ID as proof';
+      return false;
+    }
+    fieldErrors.pwdIdFile = '';
+    return true;
+  }
+
+  function validateSeniorIdFile() {
+    if (isSenior && !seniorIdFile) {
+      fieldErrors.seniorIdFile = 'Please upload your Senior Citizen ID as proof';
+      return false;
+    }
+    fieldErrors.seniorIdFile = '';
+    return true;
+  }
+
+  function validateSingleParentIdFile() {
+    if (isSingleParent && !singleParentIdFile) {
+      fieldErrors.singleParentIdFile = 'Please upload your Solo Parent ID as proof';
+      return false;
+    }
+    fieldErrors.singleParentIdFile = '';
+    return true;
+  }
+
+  function validateHousePhoto() {
+    if (!housePhoto) {
+      fieldErrors.housePhoto = 'House photo is required';
+      return false;
+    }
+    fieldErrors.housePhoto = '';
+    return true;
+  }
+
+  function validateStep1() {
+    const isFirstNameValid  = validateFirstName();
+    const isLastNameValid   = validateLastName();
+    const isBirthdateValid  = validateBirthdate();
+    const isSexValid        = validateSex();
+    const isCivilStatusValid = validateCivilStatus();
+    const isContactNoValid  = validateContactNo();
+    const isStreetValid     = validateStreet();
+    
+    // Mark all as touched to show errors
+    touchedFields.firstName   = true;
+    touchedFields.lastName    = true;
+    touchedFields.birthdate   = true;
+    touchedFields.sex         = true;
+    touchedFields.civilStatus = true;
+    touchedFields.street      = true;
+    if (contactNo.trim()) touchedFields.contactNo = true;
+    
+    return isFirstNameValid && isLastNameValid && isBirthdateValid &&
+           isSexValid && isCivilStatusValid && isContactNoValid && isStreetValid;
+  }
+
+  function validateStep2() {
+    const isPwdTypeValid        = validatePwdType();
+    const isPwdIdValid          = validatePwdIdFile();
+    const isSeniorIdValid       = validateSeniorIdFile();
+    const isSingleParentIdValid = validateSingleParentIdFile();
+    
+    if (isPWD)          touchedFields.pwdType          = true;
+    if (isPWD)          touchedFields.pwdIdFile         = true;
+    if (isSenior)       touchedFields.seniorIdFile      = true;
+    if (isSingleParent) touchedFields.singleParentIdFile = true;
+    
+    return isPwdTypeValid && isPwdIdValid && isSeniorIdValid && isSingleParentIdValid;
+  }
+
+  function validateStep3() {
+    const isHousePhotoValid = validateHousePhoto();
+    touchedFields.housePhoto = true;
+    return isHousePhotoValid;
+  }
+
+  // ── Scroll to first error function ──────────────────────
+  function scrollToFirstError() {
+    const errorSelectors = [
+      { condition: fieldErrors.firstName,          id: 'firstNameInput' },
+      { condition: fieldErrors.lastName,           id: 'lastNameInput' },
+      { condition: fieldErrors.birthdate,          id: 'birthdateInput' },
+      { condition: fieldErrors.sex,                id: 'sexSelect' },
+      { condition: fieldErrors.civilStatus,        id: 'civilStatusSelect' },
+      { condition: fieldErrors.contactNo,          id: 'contactNoInput' },
+      { condition: fieldErrors.street,             id: 'streetSelect' },
+      { condition: fieldErrors.pwdType,            id: 'pwdTypeSelect' },
+      { condition: fieldErrors.pwdIdFile,          id: 'pwdIdUpload' },
+      { condition: fieldErrors.seniorIdFile,       id: 'seniorIdUpload' },
+      { condition: fieldErrors.singleParentIdFile, id: 'singleParentIdUpload' },
+      { condition: fieldErrors.housePhoto,         id: 'housePhotoInput' }
+    ];
+    
+    for (const selector of errorSelectors) {
+      if (selector.condition) {
+        const element = document.getElementById(selector.id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.focus();
+          element.classList.add('shake-error');
+          setTimeout(() => element.classList.remove('shake-error'), 500);
+          break;
+        }
+      }
+    }
+  }
+
+  // ── Limit contact number to 11 digits ───────────────────
+  /** @param {Event} e */
+  function handleContactNoInput(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    let value = input.value.replace(/\D/g, '');
+    if (value.length > 11) {
+      value = value.slice(0, 11);
+    }
+    contactNo = value;
+    touchedFields.contactNo = true;
+    validateContactNo();
+  }
+
+  // ── Category ID file handlers ───────────────────────────
+  /** @param {Event} e */
+  function handlePwdIdChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      fieldErrors.pwdIdFile = 'File must be less than 5MB';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.pwdIdFile = 'Please select an image file';
+      return;
+    }
+    pwdIdFile = file;
+    fieldErrors.pwdIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { pwdIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
+    reader.readAsDataURL(file);
+  }
+
+  /** @param {Event} e */
+  function handleSeniorIdChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      fieldErrors.seniorIdFile = 'File must be less than 5MB';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.seniorIdFile = 'Please select an image file';
+      return;
+    }
+    seniorIdFile = file;
+    fieldErrors.seniorIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { seniorIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
+    reader.readAsDataURL(file);
+  }
+
+  /** @param {Event} e */
+  function handleSingleParentIdChange(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      fieldErrors.singleParentIdFile = 'File must be less than 5MB';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.singleParentIdFile = 'Please select an image file';
+      return;
+    }
+    singleParentIdFile = file;
+    fieldErrors.singleParentIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { singleParentIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
+    reader.readAsDataURL(file);
+  }
+
+    /**
+   * @param {number} lat
+   * @param {number} lng
+   * @param {number} accuracy
+   */
+
+  // ── GPS Functions (FIXED) ─────────────────────────────────
+  function isValidLocation(lat, lng, accuracy) {
+    if (isNaN(lat) || isNaN(lng)) return false;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+    if (accuracy > 1000) return false; // Filter out very inaccurate readings
+    
+    // Check if location jumped too far (more than 500 meters)
+    if (lastLocation) {
+      const distance = calculateDistance(lastLocation.lat, lastLocation.lng, lat, lng);
+      if (distance > 0.5) { // More than 500m jump
+        console.log('Location jump too large:', distance, 'km');
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+         /**
    * @param {number} lat1
    * @param {number} lon1
    * @param {number} lat2
    * @param {number} lon2
-   * @returns {number} distance in km
    */
+
   function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth radius in km
+    const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  // ── Enhanced GPS Request with Better Accuracy ──────────
+  function stopGPS() {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    if (maxWatchTimeout !== null) {
+      clearTimeout(maxWatchTimeout);
+      maxWatchTimeout = null;
+    }
+  }
+
   function requestGPSEnhanced() {
+    // Check if geolocation is available
     if (!navigator.geolocation) {
       gpsStatus = 'error';
       gpsMessage = 'Geolocation is not supported by your browser.';
       return;
     }
 
+    // Stop any existing GPS requests
+    stopGPS();
+    
+    // Reset state
     gpsStatus = 'pending';
     gpsAttempt = 0;
+    gpsRetryCount = 0;
     bestAccuracy = null;
+    lastLocation = null;
     gpsMessage = 'Requesting GPS location... (attempt 1/' + maxGpsRetries + ')';
 
-    // Clear any previous watch
-    if (watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-
-    // Clear any previous timeout
-    if (maxWatchTimeout !== null) {
-      clearTimeout(maxWatchTimeout);
-      maxWatchTimeout = null;
-    }
-
-    // Set a maximum timeout to stop watching (30 seconds hard limit)
+    // Set timeout for overall GPS acquisition (45 seconds)
     maxWatchTimeout = setTimeout(() => {
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -210,177 +561,221 @@
       }
       if (gpsStatus === 'pending' || gpsStatus === 'optimizing') {
         gpsStatus = 'error';
-        gpsMessage = 'GPS request timed out (30s). Please go outdoors and try again.';
+        gpsMessage = 'GPS request timed out (45s). Please go outdoors and try again.';
+        console.error('GPS timeout after 45 seconds');
       }
-    }, 30000);
+    }, 45000);
 
+    // Start watching position
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const newLat = pos.coords.latitude;
-        const newLng = pos.coords.longitude;
+        const newLat      = pos.coords.latitude;
+        const newLng      = pos.coords.longitude;
         const newAccuracy = Math.round(pos.coords.accuracy * 10) / 10;
 
-        // ── VALIDATION: Reject bad positions ──
+        console.log(`GPS Update ${gpsAttempt + 1}:`, { lat: newLat, lng: newLng, accuracy: newAccuracy });
+
+        // Validate location
         if (!isValidLocation(newLat, newLng, newAccuracy)) {
-          return; // Skip this bad reading silently
+          console.log('Invalid location, ignoring');
+          return;
         }
 
-        gpsLat = newLat;
-        gpsLng = newLng;
+        // Update last location
+        lastLocation = { lat: newLat, lng: newLng, accuracy: newAccuracy };
+        
+        // Update GPS values
+        gpsLat      = newLat;
+        gpsLng      = newLng;
         gpsAccuracy = newAccuracy;
 
-        // Track best accuracy achieved
-        if (bestAccuracy === null || gpsAccuracy < bestAccuracy) {
-          bestAccuracy = gpsAccuracy;
+        // Track best accuracy
+        if (bestAccuracy === null || newAccuracy < bestAccuracy) {
+          bestAccuracy = newAccuracy;
         }
 
         gpsAttempt++;
 
-        // Log for debugging
-        console.log(`✓ GPS Update ${gpsAttempt}:`, {
-          lat: gpsLat,
-          lng: gpsLng,
-          accuracy: gpsAccuracy,
-          bestAccuracy: bestAccuracy,
-          timestamp: new Date().toISOString()
-        });
-
-        // ── STOP CONDITIONS ──
-        if (gpsAccuracy <= 10) {
-          // Excellent accuracy (±10m) - stop immediately
+        // Success conditions based on accuracy
+        if (newAccuracy <= 15) { // Excellent accuracy
           gpsStatus = 'granted';
-          gpsMessage = `📍 Excellent! Location confirmed (±${gpsAccuracy}m accuracy)`;
-          if (maxWatchTimeout !== null) {
-            clearTimeout(maxWatchTimeout);
-            maxWatchTimeout = null;
-          }
-          if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId);
-            watchId = null;
-          }
-        } else if (gpsAccuracy <= 25) {
-          // Good accuracy (±25m) - confirm with 2 readings
-          if (gpsAttempt >= 2) {
-            gpsStatus = 'granted';
-            gpsMessage = `✓ Location acquired (±${gpsAccuracy}m accuracy)`;
-            if (maxWatchTimeout !== null) {
-              clearTimeout(maxWatchTimeout);
-              maxWatchTimeout = null;
-            }
-            if (watchId !== null) {
-              navigator.geolocation.clearWatch(watchId);
-              watchId = null;
-            }
-          } else {
-            gpsStatus = 'optimizing';
-            gpsMessage = `Optimizing... (±${gpsAccuracy}m) • Getting 2nd reading for confirmation`;
-          }
-        } else if (gpsAttempt >= maxGpsRetries) {
-          // Max retries reached - use best we have
+          gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
+          gpsRetryCount = 0;
+          stopGPS(); // Stop watching, we have good location
+        } 
+        else if (newAccuracy <= 30 && gpsAttempt >= 2) { // Good accuracy after multiple attempts
           gpsStatus = 'granted';
-          gpsMessage = `📍 Location locked (±${gpsAccuracy}m - Best effort after ${gpsAttempt} attempts)`;
-          if (maxWatchTimeout !== null) {
-            clearTimeout(maxWatchTimeout);
-            maxWatchTimeout = null;
-          }
-          if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId);
-            watchId = null;
-          }
-        } else {
-          // Still optimizing
+          gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
+          stopGPS();
+        }
+        else if (gpsAttempt >= maxGpsRetries) { // Max attempts reached
+          gpsStatus = 'granted';
+          gpsMessage = `📍 Location locked (±${newAccuracy}m - Best effort)`;
+          stopGPS();
+        }
+        else {
           gpsStatus = 'optimizing';
           const remainingRetries = maxGpsRetries - gpsAttempt;
-          gpsMessage = `Optimizing accuracy (±${gpsAccuracy}m) • ${remainingRetries} more attempts • Keep phone steady`;
+          gpsMessage = `Optimizing accuracy (±${newAccuracy}m) • ${remainingRetries} more attempts • Keep phone steady`;
         }
       },
       (err) => {
-        console.error('❌ GPS Error Code:', err.code, 'Message:', err.message);
-        if (maxWatchTimeout !== null) {
-          clearTimeout(maxWatchTimeout);
-          maxWatchTimeout = null;
-        }
-
+        console.error('❌ GPS Error:', err.code, err.message);
+        
         if (err.code === err.PERMISSION_DENIED) {
           gpsStatus = 'denied';
-          gpsMessage = 'Location permission denied. Go to Settings > Location and grant "Always" access.';
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          gpsStatus = 'error';
-          gpsMessage = 'GPS unavailable. Please go outdoors and ensure GPS is enabled in settings.';
-        } else if (err.code === err.TIMEOUT) {
-          gpsStatus = 'error';
-          gpsMessage = 'GPS request timed out. Move outdoors, away from buildings, and try again.';
-        } else {
+          gpsMessage = 'Location permission denied. Please enable location access in your browser settings.';
+          stopGPS();
+        } 
+        else if (err.code === err.POSITION_UNAVAILABLE) {
+          gpsRetryCount++;
+          if (gpsRetryCount < 3) {
+            gpsMessage = `GPS unavailable (attempt ${gpsRetryCount}/3). Please go outdoors.`;
+            // Don't stop, keep trying
+          } else {
+            gpsStatus = 'error';
+            gpsMessage = 'GPS unavailable. Please go outdoors and ensure GPS is enabled.';
+            stopGPS();
+          }
+        } 
+        else if (err.code === err.TIMEOUT) {
+          gpsRetryCount++;
+          if (gpsRetryCount < 3) {
+            gpsMessage = `GPS timeout (attempt ${gpsRetryCount}/3). Moving outdoors may help.`;
+            // Keep watching
+          } else {
+            gpsStatus = 'error';
+            gpsMessage = 'GPS request timed out. Move to an open area and try again.';
+            stopGPS();
+          }
+        }
+        else {
           gpsStatus = 'error';
           gpsMessage = 'GPS error: ' + err.message;
+          stopGPS();
         }
       },
-      {
-        enableHighAccuracy: true,      // ✓ Use actual GPS hardware
-        timeout: 10000,                // ✓ Wait up to 10 seconds per attempt
-        maximumAge: 0,                 // ✓ Always get fresh data (no cache)
+      { 
+        enableHighAccuracy: true, 
+        timeout: 15000,  // 15 second timeout per attempt
+        maximumAge: 0 
       }
     );
   }
 
-  // ── Manual GPS Retry ───────────────────────────────────
   function retryGPS() {
-    gpsAttempt = 0;
-    bestAccuracy = null;
-    if (watchId !== null) {
-      navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-    }
-    if (maxWatchTimeout !== null) {
-      clearTimeout(maxWatchTimeout);
-      maxWatchTimeout = null;
-    }
+    console.log('Manually retrying GPS...');
+    stopGPS();
+    gpsLat = null;
+    gpsLng = null;
+    gpsAccuracy = null;
     requestGPSEnhanced();
   }
 
-  // ── Cleanup GPS on component unmount ───────────────────
+  // ── SINGLE onMount (fixes the duplicate onMount bug) ────
   onMount(() => {
+    const currentQrId = window.location.pathname.split('/').pop() ?? '';
+
+    // Start GPS immediately
+    requestGPSEnhanced();
+    
+    if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
+
+    (async () => {
+      try {
+        const { db } = await import('$lib/firebase');
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
+
+        const snap = await getDocs(
+          query(collection(db, 'households'), where('qrId', '==', currentQrId))
+        );
+
+        if (snap.empty) {
+          householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
+        } else {
+          household = { id: snap.docs[0].id, ...snap.docs[0].data() };
+          if (household?.houseNo) houseNo = household.houseNo;
+          if (household?.street)  street  = household.street;
+          if (household?.zone)    purok   = household.zone;
+        }
+      } catch (e) {
+        householdError = 'Could not load household info. Please check your internet connection.';
+        console.error(e);
+      } finally {
+        householdLoading = false;
+      }
+    })();
+
+    // Cleanup function — runs when component is destroyed
     return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        watchId = null;
-      }
-      if (maxWatchTimeout !== null) {
-        clearTimeout(maxWatchTimeout);
-        maxWatchTimeout = null;
-      }
+      stopGPS();
     };
   });
 
   // ── House photo handler ────────────────────────────────
   /** @param {Event} e */
   function handlePhotoChange(e) {
-    photoError = '';
     const input = /** @type {HTMLInputElement} */ (e.target);
-    const file  = input.files?.[0];
+    const file = input.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { photoError = 'Photo must be less than 5MB.'; return; }
-    if (!file.type.startsWith('image/')) { photoError = 'Please select an image file.'; return; }
+    if (file.size > 5 * 1024 * 1024) {
+      fieldErrors.housePhoto = 'Photo must be less than 5MB';
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.housePhoto = 'Please select an image file';
+      return;
+    }
     housePhoto = file;
+    fieldErrors.housePhoto = '';
     const reader = new FileReader();
     reader.onload = (ev) => { housePhotoPreview = /** @type {string} */ (ev.target?.result ?? ''); };
     reader.readAsDataURL(file);
   }
 
-  // ── Step validation ────────────────────────────────────
-  function validateStep1() {
-    if (!firstName.trim())  { errorMsg = 'Please enter your first name.'; return false; }
-    if (!lastName.trim())   { errorMsg = 'Please enter your last name.'; return false; }
-    if (!birthdate)         { errorMsg = 'Please enter your birthdate.'; return false; }
-    if (!sex)               { errorMsg = 'Please select your sex.'; return false; }
-    if (!civilStatus)       { errorMsg = 'Please select your civil status.'; return false; }
-    return true;
+  // ── Helper function to compress image ───────────────────
+  /** @param {File} file */
+  async function compressImage(file) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        const maxW = 800, maxH = 600;
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+        const canvas = document.createElement('canvas');
+        canvas.width  = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(objectUrl);
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
+      };
+      img.onerror = () => resolve('');
+      img.src = objectUrl;
+    });
   }
 
+  // ── Step navigation with validation ────────────────────
   function nextStep() {
     errorMsg = '';
-    if (step === 1 && !validateStep1()) return;
-    step++;
+    
+    if (step === 1) {
+      if (!validateStep1()) {
+        errorMsg = 'Please fill in all required fields correctly';
+        scrollToFirstError();
+        return;
+      }
+      step++;
+    } else if (step === 2) {
+      if (!validateStep2()) {
+        errorMsg = 'Please complete all required fields';
+        scrollToFirstError();
+        return;
+      }
+      step++;
+    }
   }
 
   function prevStep() {
@@ -388,92 +783,79 @@
     step--;
   }
 
-  // ── Submit ���────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────
   async function handleSubmit() {
     errorMsg = '';
-    if (!housePhoto) { errorMsg = 'Please take or upload a photo of the house. This is required.'; return; }
+    
+    const isStep1Valid = validateStep1();
+    const isStep2Valid = validateStep2();
+    const isStep3Valid = validateStep3();
+    
+    if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
+      errorMsg = 'Please complete all required fields correctly before submitting';
+      if (!isStep1Valid) {
+        step = 1;
+        setTimeout(() => scrollToFirstError(), 100);
+      } else if (!isStep2Valid) {
+        step = 2;
+        setTimeout(() => scrollToFirstError(), 100);
+      } else if (!isStep3Valid) {
+        step = 3;
+        setTimeout(() => scrollToFirstError(), 100);
+      }
+      return;
+    }
 
     loading = true;
     try {
-      const { db }   = await import('$lib/firebase');
+      const { db } = await import('$lib/firebase');
       const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
 
-      // Compress photo before saving
-      let photoUrl = '';
-      try {
-        if (housePhoto) {
-          photoUrl = await new Promise((resolve) => {
-            const img = new Image();
-            const objectUrl = URL.createObjectURL(/** @type {File} */ (housePhoto));
-            img.onload = () => {
-              const maxW = 800, maxH = 600;
-              let w = img.width, h = img.height;
-              if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-              if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
-              const canvas = document.createElement('canvas');
-              canvas.width = w; canvas.height = h;
-              const ctx = canvas.getContext('2d');
-              ctx?.drawImage(img, 0, 0, w, h);
-              URL.revokeObjectURL(objectUrl);
-              resolve(canvas.toDataURL('image/jpeg', 0.6));
-            };
-            img.onerror = () => resolve('');
-            img.src = objectUrl;
-          });
-        }
-      } catch (photoErr) {
-        console.warn('Photo compression failed, continuing without photo:', photoErr);
-      }
+      // Compress all images
+      const housePhotoUrl     = housePhoto        ? await compressImage(housePhoto)        : '';
+      const pwdIdUrl          = pwdIdFile         ? await compressImage(pwdIdFile)         : '';
+      const seniorIdUrl       = seniorIdFile      ? await compressImage(seniorIdFile)      : '';
+      const singleParentIdUrl = singleParentIdFile ? await compressImage(singleParentIdFile) : '';
 
       await addDoc(collection(db, 'residents'), {
-        // Household link
-        householdId: household?.id ?? null,
+        householdId:         household?.id ?? null,
         qrId,
-
-        // Personal info
-        firstName:   firstName.trim(),
-        lastName:    lastName.trim(),
-        middleName:  middleName.trim(),
-        name:        `${firstName.trim()} ${lastName.trim()}`,
+        firstName:           firstName.trim(),
+        lastName:            lastName.trim(),
+        middleName:          middleName.trim(),
+        name:                `${firstName.trim()} ${lastName.trim()}`,
         birthdate,
-        age:         age ?? 0,
+        age:                 age ?? 0,
         sex,
         civilStatus,
-        contactNo:   contactNo.trim(),
-
-        // Full structured address
-        houseNo:     houseNo.trim(),
-        street:      street,
+        contactNo:           contactNo.trim(),
+        houseNo:             houseNo.trim(),
+        street,
         purok,
-        zone:        purok,
-        sector:      purok,
-        landmark:    household?.landmark ?? '',
-        barangay:    'Barangay Pag-Asa',
-        city:        'Olongapo City',
-        province:    'Zambales',
-        region:      'Region III - Central Luzon',
-        address:     fullAddress,
-
-        // Categories
+        zone:                purok,
+        sector:              purok,
+        landmark:            household?.landmark ?? '',
+        barangay:            'Barangay Pag-Asa',
+        city:                'Olongapo City',
+        province:            'Zambales',
+        region:              'Region III - Central Luzon',
+        address:             fullAddress,
         isPWD,
         isSenior,
         isSingleParent,
-        pwdType: isPWD ? pwdType : '',
-
-        // GPS (Enhanced with better accuracy)
-        lat:         gpsLat,
-        lng:         gpsLng,
+        pwdType:             isPWD ? pwdType : '',
+        pwdIdProof:          isPWD         ? pwdIdUrl          : '',
+        seniorIdProof:       isSenior      ? seniorIdUrl       : '',
+        singleParentIdProof: isSingleParent ? singleParentIdUrl : '',
+        lat:                 gpsLat,
+        lng:                 gpsLng,
         gpsAccuracy,
         bestAccuracy,
-        gpsAttempts: gpsAttempt,
-
-        // Photo
-        photoUrl,
-
-        // Meta
-        status:      'pending',
-        submittedAt: serverTimestamp(),
-        encodedBy:   null,
+        gpsAttempts:         gpsAttempt,
+        photoUrl:            housePhotoUrl,
+        status:              'pending',
+        submittedAt:         serverTimestamp(),
+        encodedBy:           null,
       });
 
       submitted = true;
@@ -494,6 +876,28 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#0f2060" />
   <title>GeoProfile — Resident Registration</title>
+  <style>
+    .shake-error {
+      animation: shake 0.3s ease-in-out;
+    }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25%       { transform: translateX(-5px); }
+      75%       { transform: translateX(5px); }
+    }
+    .error-border {
+      border-color: #ef4444 !important;
+      background-color: #fef2f2 !important;
+    }
+    .valid-border {
+      border-color: #10b981 !important;
+    }
+    .disabled-button {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+  </style>
 </svelte:head>
 
 <div class="min-h-screen bg-slate-50 font-inter">
@@ -506,7 +910,6 @@
       <p class="font-nunito font-black text-white text-base leading-none">GeoProfile</p>
       <p class="text-white/60 text-[0.65rem]">Barangay Pag-Asa · Resident Registration</p>
     </div>
-    <!-- GPS indicator (Enhanced) -->
     <div class="ml-auto flex flex-col items-end gap-0.5">
       <div class="flex items-center gap-1.5">
         {#if gpsStatus === 'granted'}
@@ -575,7 +978,6 @@
           {#if isSingleParent}<span class="text-[0.65rem] font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Single Parent</span>{/if}
           {#if !isPWD && !isSenior && !isSingleParent}<span class="text-[0.65rem] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Regular Resident</span>{/if}
         </div>
-        <!-- GPS Info in success screen -->
         <div class="border-t border-slate-300 pt-2 mt-2">
           <p class="text-xs font-semibold text-slate-600">📍 Location Data</p>
           <p class="text-[0.7rem] text-slate-500 mt-1">Accuracy: ±{gpsAccuracy ?? 'N/A'}m</p>
@@ -604,51 +1006,50 @@
         </div>
       </div>
 
-      <!-- Enhanced GPS Status Banner -->
-      {#if gpsStatus === 'pending' || gpsStatus === 'optimizing'}
-        <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 animate-pulse">
+      <!-- GPS Status Banner (FIXED) -->
+      {#if gpsStatus === 'pending'}
+        <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+          <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.3"/>
+            <path d="M12 2a10 10 0 0 1 0 20" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <div class="flex-1">
+            <p class="text-xs font-bold text-blue-700">📡 {gpsMessage}</p>
+            <p class="text-xs text-blue-600 mt-1">Please allow location access when prompted</p>
+          </div>
+        </div>
+      {:else if gpsStatus === 'optimizing'}
+        <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
           <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.3"/>
             <path d="M12 2a10 10 0 0 1 0 20" stroke="currentColor" stroke-width="2"/>
           </svg>
           <div class="flex-1">
             <p class="text-xs font-bold text-blue-700">{gpsMessage}</p>
-            {#if gpsStatus === 'optimizing'}
-              <p class="text-xs text-blue-600 mt-1">📍 Tips: Go outdoors, away from buildings · Keep phone steady</p>
-            {/if}
+            <p class="text-xs text-blue-600 mt-1">📍 Keep phone steady · Move to open area for better signal</p>
           </div>
         </div>
- {:else if gpsStatus === 'granted'}
-  <div class="flex items-start gap-2.5 rounded-xl px-4 py-3
-    {gpsAccuracy !== null && gpsAccuracy > 50
-      ? 'bg-amber-50 border border-amber-200'
-      : 'bg-green-50 border border-green-200'}">
-    <svg class="w-4 h-4 mt-0.5 shrink-0
-      {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-500' : 'text-green-500'}"
-      fill="currentColor" viewBox="0 0 24 24">
-      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
-    </svg>
-    <div class="flex-1">
-      <p class="text-xs font-bold
-        {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-700' : 'text-green-700'}">
-        {gpsMessage}
-      </p>
-      <p class="text-xs mt-0.5
-        {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-600' : 'text-green-600'}">
-        {accuracyQuality}
-      </p>
-      {#if gpsAccuracy !== null && gpsAccuracy > 50}
-        <p class="text-xs text-amber-600 mt-1">
-          Poor accuracy detected after {gpsAttempt} attempts. Go outdoors and
-          <button type="button" on:click={retryGPS}
-            class="underline font-bold hover:text-amber-800">
-            🔄 retry for better signal
-          </button>
-          — or continue with current location.
-        </p>
-      {/if}
-    </div>
-  </div>
+      {:else if gpsStatus === 'granted'}
+        <div class="flex items-start gap-2.5 rounded-xl px-4 py-3
+          {gpsAccuracy !== null && gpsAccuracy > 50
+            ? 'bg-amber-50 border border-amber-200'
+            : 'bg-green-50 border border-green-200'}">
+          <svg class="w-4 h-4 mt-0.5 shrink-0
+            {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-500' : 'text-green-500'}"
+            fill="currentColor" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+          </svg>
+          <div class="flex-1">
+            <p class="text-xs font-bold
+              {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-700' : 'text-green-700'}">
+              {gpsMessage}
+            </p>
+            <p class="text-xs mt-0.5
+              {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-600' : 'text-green-600'}">
+              {accuracyQuality}
+            </p>
+          </div>
+        </div>
       {:else if gpsStatus === 'denied' || gpsStatus === 'error'}
         <div class="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <svg class="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -656,12 +1057,13 @@
           </svg>
           <div class="flex-1">
             <p class="text-xs font-bold text-amber-700">{gpsMessage}</p>
-            <p class="text-xs text-amber-600 mt-0.5">
-              <button type="button" on:click={retryGPS} class="underline font-bold hover:text-amber-800">
-                🔄 Retry GPS
-              </button>
-              · You can still submit without precise GPS.
-            </p>
+            <button 
+              type="button" 
+              on:click={retryGPS} 
+              class="text-xs font-bold text-amber-700 underline hover:text-amber-800 mt-1">
+              🔄 Tap to retry GPS
+            </button>
+            <!-- <p class="text-xs text-amber-600 mt-0.5">You can still submit without GPS</p> -->
           </div>
         </div>
       {/if}
@@ -704,31 +1106,53 @@
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <h3 class="font-nunito font-extrabold text-slate-700">Personal Information</h3>
 
-          <!-- Name row -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">First Name <span class="text-red-400">*</span></label>
-              <input type="text" bind:value={firstName} placeholder="Juan"
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+              <input id="firstNameInput" type="text" bind:value={firstName}
+                on:blur={() => { touchedFields.firstName = true; validateFirstName(); }}
+                placeholder="Juan"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.firstName ? 'error-border' : (touchedFields.firstName && !fieldErrors.firstName && firstName ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.firstName}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.firstName}</p>
+              {:else if touchedFields.firstName && firstName && !fieldErrors.firstName}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
             </div>
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Last Name <span class="text-red-400">*</span></label>
-              <input type="text" bind:value={lastName} placeholder="Dela Cruz"
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+              <input id="lastNameInput" type="text" bind:value={lastName}
+                on:blur={() => { touchedFields.lastName = true; validateLastName(); }}
+                placeholder="Dela Cruz"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.lastName ? 'error-border' : (touchedFields.lastName && !fieldErrors.lastName && lastName ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.lastName}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.lastName}</p>
+              {:else if touchedFields.lastName && lastName && !fieldErrors.lastName}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
             </div>
           </div>
 
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Middle Name</label>
-            <input type="text" bind:value={middleName} placeholder="Santos (optional)"
+            <label for="middleNameInput" class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Middle Name</label>
+            <input id="middleNameInput" type="text" bind:value={middleName} placeholder="Santos (optional)"
               class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
           </div>
 
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Birthdate <span class="text-red-400">*</span></label>
-            <input type="date" bind:value={birthdate}
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
-            {#if age !== null}
+            <input id="birthdateInput" type="date" bind:value={birthdate}
+              on:blur={() => { touchedFields.birthdate = true; validateBirthdate(); }}
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.birthdate ? 'error-border' : (touchedFields.birthdate && !fieldErrors.birthdate && birthdate ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.birthdate}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.birthdate}</p>
+            {:else if touchedFields.birthdate && birthdate && !fieldErrors.birthdate}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
+            {#if age !== null && !fieldErrors.birthdate && ageInDays !== null && ageInDays >= 30}
               <p class="text-xs text-slate-400 mt-1.5 ml-1">Age: <span class="font-bold text-slate-600">{age} years old</span>
                 {#if age >= 60}<span class="ml-1 text-emerald-600 font-bold">· Senior Citizen ✓</span>{/if}
               </p>
@@ -739,9 +1163,11 @@
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Sex <span class="text-red-400">*</span></label>
               <div class="relative">
-                <select bind:value={sex}
-                  class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                         {sex === '' ? 'text-slate-300' : ''}">
+                <select id="sexSelect" bind:value={sex}
+                  on:change={() => { touchedFields.sex = true; validateSex(); }}
+                  class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
+                         {sex === '' ? 'text-slate-300' : 'text-slate-700'}
+                         {fieldErrors.sex ? 'error-border' : (touchedFields.sex && !fieldErrors.sex && sex ? 'valid-border' : 'border-slate-200')}">
                   <option value="" disabled selected>Select</option>
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
@@ -750,13 +1176,18 @@
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
+              {#if fieldErrors.sex}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.sex}</p>
+              {/if}
             </div>
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Civil Status <span class="text-red-400">*</span></label>
               <div class="relative">
-                <select bind:value={civilStatus}
-                  class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                         {civilStatus === '' ? 'text-slate-300' : ''}">
+                <select id="civilStatusSelect" bind:value={civilStatus}
+                  on:change={() => { touchedFields.civilStatus = true; validateCivilStatus(); }}
+                  class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
+                         {civilStatus === '' ? 'text-slate-300' : 'text-slate-700'}
+                         {fieldErrors.civilStatus ? 'error-border' : (touchedFields.civilStatus && !fieldErrors.civilStatus && civilStatus ? 'valid-border' : 'border-slate-200')}">
                   <option value="" disabled selected>Select</option>
                   <option value="Single">Single</option>
                   <option value="Married">Married</option>
@@ -767,24 +1198,34 @@
                   <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
+              {#if fieldErrors.civilStatus}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.civilStatus}</p>
+              {/if}
             </div>
           </div>
 
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Contact Number</label>
-            <input type="tel" bind:value={contactNo} placeholder="09XX-XXX-XXXX"
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+            <input id="contactNoInput" type="tel" bind:value={contactNo}
+              on:input={handleContactNoInput}
+              on:blur={() => { touchedFields.contactNo = true; validateContactNo(); }}
+              placeholder="09123456789" maxlength="11"
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.contactNo ? 'error-border' : (touchedFields.contactNo && contactNo && !fieldErrors.contactNo ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.contactNo}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.contactNo}</p>
+            {:else if touchedFields.contactNo && contactNo && !fieldErrors.contactNo}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
           </div>
         </div>
 
-        <!-- ── Address section ── -->
+        <!-- Address section -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <div class="flex items-center gap-1.5">
             <h3 class="font-nunito font-extrabold text-slate-700">Address</h3>
-            <span class="text-[0.65rem] text-slate-400 font-normal"></span>
           </div>
 
-          <!-- Region (locked) -->
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Region</label>
             <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
@@ -792,7 +1233,6 @@
             </div>
           </div>
 
-          <!-- Province + City (locked) -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Province</label>
@@ -801,14 +1241,13 @@
               </div>
             </div>
             <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">City / Municipality</label>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">City</label>
               <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
                 Olongapo City
               </div>
             </div>
           </div>
 
-          <!-- Barangay (locked) -->
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Barangay</label>
             <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
@@ -816,14 +1255,15 @@
             </div>
           </div>
 
-          <!-- Street dropdown -->
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Street</label>
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Street <span class="text-red-400">*</span></label>
             <div class="relative">
-              <select bind:value={street}
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                       {street === '' ? 'text-slate-300' : 'text-slate-700'}">
-                <option value="">Select street </option>
+              <select id="streetSelect" bind:value={street}
+                on:change={() => { touchedFields.street = true; validateStreet(); }}
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
+                       {street === '' ? 'text-slate-300' : 'text-slate-700'}
+                       {fieldErrors.street ? 'error-border' : (touchedFields.street && street ? 'valid-border' : 'border-slate-200')}">
+                <option value="">Select street</option>
                 {#each streets as s (s)}
                   <option value={s}>{s}</option>
                 {/each}
@@ -832,25 +1272,18 @@
                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
               </svg>
             </div>
+            {#if fieldErrors.street}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.street}</p>
+            {/if}
           </div>
 
-          <!-- House No / Unit / Block -->
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-              House No. / Unit / Block
-            </label>
-            <input
-              type="text"
-              bind:value={houseNo}
-              placeholder="e.g. 47  or  Unit 3B  or  Blk 2 Lot 5"
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all"
-            />
-            <!-- Quick-fill hint chips -->
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">House No. / Unit / Block</label>
+            <input type="text" bind:value={houseNo} placeholder="e.g. 47 or Unit 3B or Blk 2 Lot 5"
+              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
             <div class="flex flex-wrap gap-1.5 mt-2">
               {#each ['47', 'Unit 3B', 'Blk 2 Lot 5', 'Room 1'] as ex (ex)}
-                <button
-                  type="button"
-                  on:click={() => houseNo = ex}
+                <button type="button" on:click={() => houseNo = ex}
                   class="text-[0.65rem] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
                   {ex}
                 </button>
@@ -858,17 +1291,11 @@
             </div>
           </div>
 
-          <!-- Address preview -->
           <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-400 mb-1">Full Address Preview</p>
             <p class="text-xs text-blue-700 font-semibold leading-relaxed">
               {fullAddress || 'Barangay Pag-Asa, Olongapo City, Zambales'}
             </p>
-            {#if !houseNo && !street && !purok}
-              <p class="text-[0.65rem] text-blue-300 mt-1 italic">
-                e.g. 47 Murphy Street, Purok 3, Barangay Pag-Asa, Olongapo City, Zambales
-              </p>
-            {/if}
           </div>
         </div>
 
@@ -881,7 +1308,7 @@
           </div>
 
           <!-- PWD toggle -->
-          <button type="button" on:click={() => isPWD = !isPWD}
+          <button type="button" on:click={() => { isPWD = !isPWD; if (!isPWD) { pwdType = ''; pwdIdFile = null; pwdIdPreview = ''; fieldErrors.pwdIdFile = ''; fieldErrors.pwdType = ''; } }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
                    {isPWD ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
@@ -905,32 +1332,70 @@
           </button>
 
           {#if isPWD}
-            <div class="ml-4">
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Type of Disability</label>
-              <div class="relative">
-                <select bind:value={pwdType}
-                  class="w-full px-3 py-2.5 rounded-xl border-2 border-amber-200 bg-amber-50 text-slate-700 text-sm outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 transition-all appearance-none cursor-pointer">
-                  <option value="">Select type</option>
-                  <option>Physical Disability</option>
-                  <option>Visual Impairment</option>
-                  <option>Hearing Impairment</option>
-                  <option>Intellectual Disability</option>
-                  <option>Psychosocial Disability</option>
-                  <option>Learning Disability</option>
-                  <option>Speech & Language Impairment</option>
-                  <option>Multiple Disability</option>
-                </select>
-                <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
+            <div class="ml-4 space-y-3">
+              <div>
+                <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Type of Disability <span class="text-red-400">*</span></label>
+                <div class="relative">
+                  <select id="pwdTypeSelect" bind:value={pwdType}
+                    on:change={() => { touchedFields.pwdType = true; validatePwdType(); }}
+                    class="w-full px-3 py-2.5 rounded-xl border-2 bg-amber-50 text-slate-700 text-sm outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 transition-all appearance-none cursor-pointer
+                    {fieldErrors.pwdType ? 'error-border' : (touchedFields.pwdType && pwdType ? 'valid-border' : 'border-amber-200')}">
+                    <option value="">Select type</option>
+                    <option>Physical Disability</option>
+                    <option>Visual Impairment</option>
+                    <option>Hearing Impairment</option>
+                    <option>Intellectual Disability</option>
+                    <option>Psychosocial Disability</option>
+                    <option>Learning Disability</option>
+                    <option>Speech &amp; Language Impairment</option>
+                    <option>Multiple Disability</option>
+                  </select>
+                  <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                  </svg>
+                </div>
+                {#if fieldErrors.pwdType}
+                  <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.pwdType}</p>
+                {/if}
+              </div>
+
+              <div id="pwdIdUpload">
+                <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">PWD ID Proof <span class="text-red-400">*</span></label>
+                {#if pwdIdPreview}
+                  <div class="relative rounded-xl overflow-hidden border-2 border-emerald-300">
+                    <img src={pwdIdPreview} alt="PWD ID" class="w-full h-32 object-cover" />
+                    <button type="button" on:click={() => { pwdIdFile = null; pwdIdPreview = ''; fieldErrors.pwdIdFile = ''; }}
+                      class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shadow">
+                      <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                {:else}
+                  <label class="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-all bg-slate-50
+                    {fieldErrors.pwdIdFile ? 'border-red-400 bg-red-50' : 'border-slate-300'}">
+                    <div class="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
+                      <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                      </svg>
+                    </div>
+                    <p class="text-xs text-center text-slate-600">Upload PWD ID or medical certificate</p>
+                    <input type="file" accept="image/*" on:change={handlePwdIdChange} class="hidden" />
+                  </label>
+                {/if}
+                {#if fieldErrors.pwdIdFile}
+                  <p class="text-xs text-red-500 mt-1">{fieldErrors.pwdIdFile}</p>
+                {/if}
               </div>
             </div>
           {/if}
 
-          <!-- Senior toggle -->
-          <button type="button" on:click={() => isSenior = !isSenior}
+          <!-- Senior toggle (Disabled if age < 60) -->
+          <button type="button" on:click={() => { if (!isSeniorDisabled) isSenior = !isSenior; }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
-                   {isSenior ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}">
+                   {isSenior ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}
+                   {isSeniorDisabled ? 'opacity-50 cursor-not-allowed' : ''}">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
                         {isSenior ? 'bg-emerald-500' : 'bg-slate-200'}">
               <svg class="w-5 h-5 {isSenior ? 'text-white' : 'text-slate-400'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -939,7 +1404,12 @@
             </div>
             <div class="flex-1 text-left">
               <p class="font-bold text-slate-700 text-sm">Senior Citizen</p>
-              <p class="text-xs text-slate-400">60 years old and above {age !== null && age >= 60 ? '· Auto-detected ✓' : ''}</p>
+              <p class="text-xs text-slate-400">
+                60 years old and above
+                {#if age !== null && age >= 60}· Auto-detected ✓
+                {:else if isSeniorDisabled && age !== null}· Need to be 60+ (currently {age})
+                {/if}
+              </p>
             </div>
             <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0
                         {isSenior ? 'border-emerald-400 bg-emerald-400' : 'border-slate-300'}">
@@ -951,8 +1421,40 @@
             </div>
           </button>
 
+          {#if isSenior && !isSeniorDisabled}
+            <div id="seniorIdUpload" class="ml-4">
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Senior Citizen ID Proof <span class="text-red-400">*</span></label>
+              {#if seniorIdPreview}
+                <div class="relative rounded-xl overflow-hidden border-2 border-emerald-300">
+                  <img src={seniorIdPreview} alt="Senior ID" class="w-full h-32 object-cover" />
+                  <button type="button" on:click={() => { seniorIdFile = null; seniorIdPreview = ''; fieldErrors.seniorIdFile = ''; }}
+                    class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shadow">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              {:else}
+                <label class="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-all bg-slate-50
+                  {fieldErrors.seniorIdFile ? 'border-red-400 bg-red-50' : 'border-slate-300'}">
+                  <div class="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                  </div>
+                  <p class="text-xs text-center text-slate-600">Upload Senior Citizen ID</p>
+                  <input type="file" accept="image/*" on:change={handleSeniorIdChange} class="hidden" />
+                </label>
+              {/if}
+              {#if fieldErrors.seniorIdFile}
+                <p class="text-xs text-red-500 mt-1">{fieldErrors.seniorIdFile}</p>
+              {/if}
+            </div>
+          {/if}
+
           <!-- Single Parent toggle -->
-          <button type="button" on:click={() => isSingleParent = !isSingleParent}
+          <button type="button" on:click={() => { isSingleParent = !isSingleParent; if (!isSingleParent) { singleParentIdFile = null; singleParentIdPreview = ''; fieldErrors.singleParentIdFile = ''; } }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
                    {isSingleParent ? 'border-violet-400 bg-violet-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}">
             <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
@@ -975,6 +1477,38 @@
             </div>
           </button>
 
+          {#if isSingleParent}
+            <div id="singleParentIdUpload" class="ml-4">
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Solo Parent ID Proof <span class="text-red-400">*</span></label>
+              {#if singleParentIdPreview}
+                <div class="relative rounded-xl overflow-hidden border-2 border-emerald-300">
+                  <img src={singleParentIdPreview} alt="Single Parent ID" class="w-full h-32 object-cover" />
+                  <button type="button" on:click={() => { singleParentIdFile = null; singleParentIdPreview = ''; fieldErrors.singleParentIdFile = ''; }}
+                    class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shadow">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              {:else}
+                <label class="flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed rounded-xl cursor-pointer hover:border-violet-400 hover:bg-violet-50 transition-all bg-slate-50
+                  {fieldErrors.singleParentIdFile ? 'border-red-400 bg-red-50' : 'border-slate-300'}">
+                  <div class="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                  </div>
+                  <p class="text-xs text-center text-slate-600">Upload Solo Parent ID</p>
+                  <input type="file" accept="image/*" on:change={handleSingleParentIdChange} class="hidden" />
+                </label>
+              {/if}
+              {#if fieldErrors.singleParentIdFile}
+                <p class="text-xs text-red-500 mt-1">{fieldErrors.singleParentIdFile}</p>
+              {/if}
+            </div>
+          {/if}
+
           {#if !isPWD && !isSenior && !isSingleParent}
             <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
               <svg class="w-4 h-4 text-blue-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -993,42 +1527,39 @@
             <p class="text-xs text-slate-400 mt-0.5">Required — take a clear photo of the front of your house</p>
           </div>
 
-          <!-- Photo upload -->
-          {#if housePhotoPreview}
-            <div class="relative rounded-xl overflow-hidden border-2 border-emerald-300">
-              <img src={housePhotoPreview} alt="House" class="w-full h-48 object-cover" />
-              <button type="button"
-                on:click={() => { housePhoto = null; housePhotoPreview = ''; }}
-                class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shadow">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-              <div class="absolute bottom-2 left-2 bg-black/50 text-white text-xs font-bold px-2 py-1 rounded-lg">
-                ✓ Photo captured
+          <div id="housePhotoInput">
+            {#if housePhotoPreview}
+              <div class="relative rounded-xl overflow-hidden border-2 border-emerald-300">
+                <img src={housePhotoPreview} alt="House" class="w-full h-48 object-cover" />
+                <button type="button"
+                  on:click={() => { housePhoto = null; housePhotoPreview = ''; fieldErrors.housePhoto = ''; }}
+                  class="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 flex items-center justify-center shadow">
+                  <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
               </div>
-            </div>
-          {:else}
-            <label class="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all bg-slate-50">
-              <div class="w-14 h-14 rounded-2xl bg-slate-200 flex items-center justify-center">
-                <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-              </div>
-              <div class="text-center">
-                <p class="text-sm font-bold text-slate-700">Take Photo or Upload</p>
-                <p class="text-xs text-slate-400 mt-0.5">Front view of your house · Max 5MB</p>
-              </div>
-              <input type="file" accept="image/*" capture="environment" on:change={handlePhotoChange} class="hidden" />
-            </label>
-          {/if}
+            {:else}
+              <label class="flex flex-col items-center justify-center gap-3 p-6 border-2 border-dashed rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all bg-slate-50
+                {fieldErrors.housePhoto ? 'border-red-400 bg-red-50' : 'border-slate-300'}">
+                <div class="w-14 h-14 rounded-2xl bg-slate-200 flex items-center justify-center">
+                  <svg class="w-7 h-7 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0118.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                </div>
+                <div class="text-center">
+                  <p class="text-sm font-bold text-slate-700">Take Photo or Upload</p>
+                  <p class="text-xs text-slate-400 mt-0.5">Front view of your house · Max 5MB</p>
+                </div>
+                <input type="file" accept="image/*" capture="environment" on:change={handlePhotoChange} class="hidden" />
+              </label>
+            {/if}
+            {#if fieldErrors.housePhoto}
+              <p class="text-xs text-red-500 font-semibold mt-2">{fieldErrors.housePhoto}</p>
+            {/if}
+          </div>
 
-          {#if photoError}
-            <p class="text-xs text-red-500 font-semibold">{photoError}</p>
-          {/if}
-
-          <!-- Summary -->
           <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-2">Review Your Info</p>
             <p class="text-sm font-bold text-slate-700">{firstName} {lastName}</p>
@@ -1040,7 +1571,6 @@
               {#if isSingleParent}<span class="text-[0.65rem] font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">Single Parent</span>{/if}
               {#if !isPWD && !isSenior && !isSingleParent}<span class="text-[0.65rem] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Regular Resident</span>{/if}
             </div>
-            <!-- GPS status -->
             <div class="border-t border-slate-200 pt-2 mt-2 space-y-1">
               <p class="text-[0.65rem] font-bold text-slate-600 uppercase tracking-widest">📍 GPS Location</p>
               {#if gpsStatus === 'granted' || gpsStatus === 'optimizing'}
