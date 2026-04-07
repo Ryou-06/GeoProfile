@@ -181,23 +181,6 @@
     <p class="text-sm text-slate-500 mt-0.5">Create a household registration QR for Barangay Pag-Asa</p>
   </div>
 
-  <!-- URL Configuration Notice -->
-  <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
-    <div class="flex items-start gap-2">
-      <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-      <div>
-        <p class="text-xs font-bold text-blue-900">Development Mode</p>
-        <p class="text-xs text-blue-700 mt-0.5">
-          Current URL: <code class="bg-blue-100 px-1 rounded font-mono">{BASE_URL}</code>
-        </p>
-        <p class="text-xs text-blue-600 mt-1">
-          ⚠️ Change <code class="bg-blue-100 px-1 rounded font-mono">BASE_URL</code> in the code before deploying to production!
-        </p>
-      </div>
-    </div>
-  </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -286,10 +269,10 @@
                 </p>
               {/if}
             </div>
-            <div class="w-full bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
+            <!-- <div class="w-full bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
               <p class="text-[0.62rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Registration Link</p>
               <p class="text-xs text-blue-600 font-medium break-all">{generatedHousehold.registrationUrl}</p>
-            </div>
+            </div> -->
             <div class="flex gap-3 w-full">
               <button type="button" on:click={handlePrint}
                 class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
