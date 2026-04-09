@@ -11,6 +11,7 @@
     notes?: string;
     createdAt: number;
     createdBy: string;
+    createdByName?: string;  // ADD THIS
     registrationUrl?: string;
   }
 
@@ -19,7 +20,7 @@
   let creating = false;
   let errorMsg = '';
 
-  // Form fields — zone removed
+  // Form fields
   let houseNo = '';
   let notes   = '';
 
@@ -29,6 +30,23 @@
 
   let unsubs: (() => void)[] = [];
 
+  // Helper function to get staff name
+  async function getCurrentStaffName(userId: string): Promise<string> {
+    try {
+      const { db } = await import('$lib/firebase');
+      const { doc, getDoc } = await import('firebase/firestore');
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        return userData.name || userData.displayName || userData.email || userId;
+      }
+      return userId;
+    } catch (error) {
+      console.error('Error fetching staff name:', error);
+      return userId;
+    }
+  }
 
   onMount(async () => {
     loadHouseholds();
@@ -80,6 +98,9 @@
       const user = auth.currentUser;
       if (!user) { window.location.href = '/'; return; }
 
+      // Get the staff's full name
+      const staffName = await getCurrentStaffName(user.uid);
+
       const qrId = `HH-${Date.now().toString(36).toUpperCase()}`;
       const registrationUrl = `${BASE_URL}/register/${qrId}`;
 
@@ -88,6 +109,7 @@
         houseNo: houseNo.trim(),
         notes: notes.trim(),
         createdBy: user.uid,
+        createdByName: staffName,  // ADD THIS - stores staff name
         createdAt: serverTimestamp(),
         status: 'active',
       });
@@ -101,6 +123,7 @@
         notes: notes.trim(),
         createdAt: Date.now(),
         createdBy: user.uid,
+        createdByName: staffName,  // ADD THIS
         registrationUrl,
       };
 
@@ -121,6 +144,7 @@
     generatedHousehold = { ...hh, registrationUrl };
   }
 
+  // Rest of your functions (handlePrint, handleDownload) remain the same
   function handlePrint() {
     if (!generatedHousehold) return;
     const printWindow = window.open('', '_blank');

@@ -1,44 +1,63 @@
 <!-- PUBLIC PWA form — no login required -->
 <!-- src/routes/register/[qrId]/+page.svelte -->
+<!-- ngrok http --domain=overlavishly-unsequential-janean.ngrok-free.dev 5173 - for running in online -->
 
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
 
   // ── QR / Household ─────────────────────────────────────
-  $: qrId = $page.params.qrId;
-  /** @type {any} */
-  let household = null;
-  let householdLoading = true;
-  let householdError   = '';
+$: qrId = $page.params.qrId;
+
+interface Household {
+  id: string;
+  qrId: string;
+  houseNo: string;
+  notes?: string;
+  createdAt: unknown;
+  createdBy: string;
+  createdByName?: string;
+  status?: string;
+  street?: string;
+  zone?: string;
+  landmark?: string;
+}
+
+let household: Household | null = null;
+let householdLoading = true;
+let householdError = '';
 
   // ── GPS (Enhanced with Better Accuracy) ────────────────
-  let gpsLat      = /** @type {number|null} */ (null);
-  let gpsLng      = /** @type {number|null} */ (null);
-  let gpsAccuracy = /** @type {number|null} */ (null);
-  let gpsStatus   = 'pending'; // pending, optimizing, granted, denied, error
-  let gpsAttempt  = 0;
+  let gpsLat: number | null = null;
+  let gpsLng: number | null = null;
+  let gpsAccuracy: number | null = null;
+  let gpsStatus = 'pending'; // pending, optimizing, granted, denied, error
+  let gpsAttempt = 0;
   let maxGpsRetries = 8;
-  let watchId = /** @type {number|null} */ (null);
-  let bestAccuracy = /** @type {number|null} */ (null);
+  let watchId: number | null = null;
+  let bestAccuracy: number | null = null;
   let gpsMessage = 'Requesting GPS location...';
-  let maxWatchTimeout = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
-  let lastLocation = /** @type {{lat: number, lng: number, accuracy: number}|null} */ (null);
+  let maxWatchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let lastLocation: { lat: number; lng: number; accuracy: number } | null = null;
   let gpsRetryCount = 0;
 
   // ── Form fields ────────────────────────────────────────
-  let firstName    = '';
-  let lastName     = '';
-  let middleName   = '';
-  let birthdate    = '';
-  let sex          = '';
-  let civilStatus  = '';
-  let contactNo    = '';
+  let firstName = '';
+  let lastName = '';
+  let middleName = '';
+  let extensionName = '';
+  let birthdate = '';
+  let placeOfBirth = '';
+  let sex = '';
+  let civilStatus = '';
+  let citizenship = 'Filipino';
+  let occupation = '';
+  let contactNo = '';
 
   // ── Address fields ─────────────────────────────────────
-  let houseNo  = '';
-  let street   = '';
-  let purok    = '';
+  let houseNo = '';
+  let street = '';
+  let purok = '';
 
   const streets = [
     'Gordon Avenue',
@@ -51,35 +70,27 @@
   ];
 
   // ── Categories ─────────────────────────────────────────
-  let isPWD          = false;
-  let isSenior       = false;
+  let isPWD = false;
+  let isSenior = false;
   let isSingleParent = false;
-  let pwdType        = '';
+  let pwdType = '';
 
   // ── Category ID Uploads ────────────────────────────────
-  /** @type {File|null} */
-  let pwdIdFile = null;
-  /** @type {string} */
+  let pwdIdFile: File | null = null;
   let pwdIdPreview = '';
-  /** @type {File|null} */
-  let seniorIdFile = null;
-  /** @type {string} */
+  let seniorIdFile: File | null = null;
   let seniorIdPreview = '';
-  /** @type {File|null} */
-  let singleParentIdFile = null;
-  /** @type {string} */
+  let singleParentIdFile: File | null = null;
   let singleParentIdPreview = '';
 
   // ── House photo ────────────────────────────────────────
-  /** @type {File|null} */
-  let housePhoto        = null;
-  /** @type {string} */
+  let housePhoto: File | null = null;
   let housePhotoPreview = '';
 
   // ── Form state ─────────────────────────────────────────
-  let step      = 1;
-  let loading   = false;
-  let errorMsg  = '';
+  let step = 1;
+  let loading = false;
+  let errorMsg = '';
   let submitted = false;
 
   // ── Validation state ───────────────────────────────────
@@ -118,12 +129,10 @@
     ? Math.floor((Date.now() - Date.parse(birthdate)) / (365.25 * 24 * 60 * 60 * 1000))
     : null;
   
-  // Calculate age in days for minimum age validation
   $: ageInDays = birthdate
     ? Math.floor((Date.now() - Date.parse(birthdate)) / (24 * 60 * 60 * 1000))
     : null;
   
-  // Auto-check Senior if age >= 60
   $: if (age !== null && age >= 60) isSenior = true;
 
   // Real-time validation triggers
@@ -145,6 +154,11 @@
     .filter(Boolean)
     .join(', ');
 
+  // ── Full name with extension ────────────────────────────
+  $: fullName = [firstName.trim(), middleName.trim(), lastName.trim(), extensionName]
+    .filter(Boolean)
+    .join(' ');
+
   // ── Accuracy quality indicator ──────────────────────────
   $: accuracyQuality = gpsAccuracy === null 
     ? 'Unknown'
@@ -160,7 +174,7 @@
   $: isSeniorDisabled = age === null || age < 60;
 
   // ── VALIDATION FUNCTIONS ────────────────────────────────
-  function validateFirstName() {
+  function validateFirstName(): boolean {
     if (!firstName.trim()) {
       fieldErrors.firstName = 'First name is required';
       return false;
@@ -177,7 +191,7 @@
     return true;
   }
 
-  function validateLastName() {
+  function validateLastName(): boolean {
     if (!lastName.trim()) {
       fieldErrors.lastName = 'Last name is required';
       return false;
@@ -194,7 +208,7 @@
     return true;
   }
 
-  function validateBirthdate() {
+  function validateBirthdate(): boolean {
     if (!birthdate) {
       fieldErrors.birthdate = 'Birthdate is required';
       return false;
@@ -207,21 +221,9 @@
     }
 
     const nowMs = Date.now();
-    const todayLocal = new Intl.DateTimeFormat('en-CA', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(nowMs);
 
     if (birthDateMs > nowMs) {
       fieldErrors.birthdate = 'Birthdate cannot be in the future';
-      return false;
-    }
-
-    // Check if birthdate is today
-    if (birthdate === todayLocal) {
-      fieldErrors.birthdate = 'Resident must be at least 1 month old';
       return false;
     }
 
@@ -233,7 +235,6 @@
       return false;
     }
 
-    // Minimum age requirement: at least 30 days old (approximately 1 month)
     if (ageInDaysLocal < 30) {
       fieldErrors.birthdate = 'Resident must be at least 1 month old';
       return false;
@@ -248,7 +249,7 @@
     return true;
   }
 
-  function validateSex() {
+  function validateSex(): boolean {
     if (!sex) {
       fieldErrors.sex = 'Please select your sex';
       return false;
@@ -257,7 +258,7 @@
     return true;
   }
 
-  function validateCivilStatus() {
+  function validateCivilStatus(): boolean {
     if (!civilStatus) {
       fieldErrors.civilStatus = 'Please select your civil status';
       return false;
@@ -266,7 +267,7 @@
     return true;
   }
 
-  function validateContactNo() {
+  function validateContactNo(): boolean {
     const cleaned = contactNo.trim().replace(/\s/g, '');
     if (cleaned && !/^09\d{9}$/.test(cleaned)) {
       fieldErrors.contactNo = 'Enter valid 11-digit PH number (e.g., 09123456789)';
@@ -280,7 +281,7 @@
     return true;
   }
 
-  function validateStreet() {
+  function validateStreet(): boolean {
     if (!street) {
       fieldErrors.street = 'Please select a street';
       return false;
@@ -289,7 +290,7 @@
     return true;
   }
 
-  function validatePwdType() {
+  function validatePwdType(): boolean {
     if (isPWD && !pwdType) {
       fieldErrors.pwdType = 'Please select type of disability';
       return false;
@@ -298,7 +299,7 @@
     return true;
   }
 
-  function validatePwdIdFile() {
+  function validatePwdIdFile(): boolean {
     if (isPWD && !pwdIdFile) {
       fieldErrors.pwdIdFile = 'Please upload your PWD ID as proof';
       return false;
@@ -307,7 +308,7 @@
     return true;
   }
 
-  function validateSeniorIdFile() {
+  function validateSeniorIdFile(): boolean {
     if (isSenior && !seniorIdFile) {
       fieldErrors.seniorIdFile = 'Please upload your Senior Citizen ID as proof';
       return false;
@@ -316,7 +317,7 @@
     return true;
   }
 
-  function validateSingleParentIdFile() {
+  function validateSingleParentIdFile(): boolean {
     if (isSingleParent && !singleParentIdFile) {
       fieldErrors.singleParentIdFile = 'Please upload your Solo Parent ID as proof';
       return false;
@@ -325,7 +326,7 @@
     return true;
   }
 
-  function validateHousePhoto() {
+  function validateHousePhoto(): boolean {
     if (!housePhoto) {
       fieldErrors.housePhoto = 'House photo is required';
       return false;
@@ -334,43 +335,42 @@
     return true;
   }
 
-  function validateStep1() {
-    const isFirstNameValid  = validateFirstName();
-    const isLastNameValid   = validateLastName();
-    const isBirthdateValid  = validateBirthdate();
-    const isSexValid        = validateSex();
+  function validateStep1(): boolean {
+    const isFirstNameValid = validateFirstName();
+    const isLastNameValid = validateLastName();
+    const isBirthdateValid = validateBirthdate();
+    const isSexValid = validateSex();
     const isCivilStatusValid = validateCivilStatus();
-    const isContactNoValid  = validateContactNo();
-    const isStreetValid     = validateStreet();
+    const isContactNoValid = validateContactNo();
+    const isStreetValid = validateStreet();
     
-    // Mark all as touched to show errors
-    touchedFields.firstName   = true;
-    touchedFields.lastName    = true;
-    touchedFields.birthdate   = true;
-    touchedFields.sex         = true;
+    touchedFields.firstName = true;
+    touchedFields.lastName = true;
+    touchedFields.birthdate = true;
+    touchedFields.sex = true;
     touchedFields.civilStatus = true;
-    touchedFields.street      = true;
+    touchedFields.street = true;
     if (contactNo.trim()) touchedFields.contactNo = true;
     
     return isFirstNameValid && isLastNameValid && isBirthdateValid &&
            isSexValid && isCivilStatusValid && isContactNoValid && isStreetValid;
   }
 
-  function validateStep2() {
-    const isPwdTypeValid        = validatePwdType();
-    const isPwdIdValid          = validatePwdIdFile();
-    const isSeniorIdValid       = validateSeniorIdFile();
+  function validateStep2(): boolean {
+    const isPwdTypeValid = validatePwdType();
+    const isPwdIdValid = validatePwdIdFile();
+    const isSeniorIdValid = validateSeniorIdFile();
     const isSingleParentIdValid = validateSingleParentIdFile();
     
-    if (isPWD)          touchedFields.pwdType          = true;
-    if (isPWD)          touchedFields.pwdIdFile         = true;
-    if (isSenior)       touchedFields.seniorIdFile      = true;
+    if (isPWD) touchedFields.pwdType = true;
+    if (isPWD) touchedFields.pwdIdFile = true;
+    if (isSenior) touchedFields.seniorIdFile = true;
     if (isSingleParent) touchedFields.singleParentIdFile = true;
     
     return isPwdTypeValid && isPwdIdValid && isSeniorIdValid && isSingleParentIdValid;
   }
 
-  function validateStep3() {
+  function validateStep3(): boolean {
     const isHousePhotoValid = validateHousePhoto();
     touchedFields.housePhoto = true;
     return isHousePhotoValid;
@@ -379,18 +379,18 @@
   // ── Scroll to first error function ──────────────────────
   function scrollToFirstError() {
     const errorSelectors = [
-      { condition: fieldErrors.firstName,          id: 'firstNameInput' },
-      { condition: fieldErrors.lastName,           id: 'lastNameInput' },
-      { condition: fieldErrors.birthdate,          id: 'birthdateInput' },
-      { condition: fieldErrors.sex,                id: 'sexSelect' },
-      { condition: fieldErrors.civilStatus,        id: 'civilStatusSelect' },
-      { condition: fieldErrors.contactNo,          id: 'contactNoInput' },
-      { condition: fieldErrors.street,             id: 'streetSelect' },
-      { condition: fieldErrors.pwdType,            id: 'pwdTypeSelect' },
-      { condition: fieldErrors.pwdIdFile,          id: 'pwdIdUpload' },
-      { condition: fieldErrors.seniorIdFile,       id: 'seniorIdUpload' },
+      { condition: fieldErrors.firstName, id: 'firstNameInput' },
+      { condition: fieldErrors.lastName, id: 'lastNameInput' },
+      { condition: fieldErrors.birthdate, id: 'birthdateInput' },
+      { condition: fieldErrors.sex, id: 'sexSelect' },
+      { condition: fieldErrors.civilStatus, id: 'civilStatusSelect' },
+      { condition: fieldErrors.contactNo, id: 'contactNoInput' },
+      { condition: fieldErrors.street, id: 'streetSelect' },
+      { condition: fieldErrors.pwdType, id: 'pwdTypeSelect' },
+      { condition: fieldErrors.pwdIdFile, id: 'pwdIdUpload' },
+      { condition: fieldErrors.seniorIdFile, id: 'seniorIdUpload' },
       { condition: fieldErrors.singleParentIdFile, id: 'singleParentIdUpload' },
-      { condition: fieldErrors.housePhoto,         id: 'housePhotoInput' }
+      { condition: fieldErrors.housePhoto, id: 'housePhotoInput' }
     ];
     
     for (const selector of errorSelectors) {
@@ -398,7 +398,7 @@
         const element = document.getElementById(selector.id);
         if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          element.focus();
+          (element as HTMLElement).focus();
           element.classList.add('shake-error');
           setTimeout(() => element.classList.remove('shake-error'), 500);
           break;
@@ -408,9 +408,8 @@
   }
 
   // ── Limit contact number to 11 digits ───────────────────
-  /** @param {Event} e */
-  function handleContactNoInput(e) {
-    const input = /** @type {HTMLInputElement} */ (e.target);
+  function handleContactNoInput(e: Event) {
+    const input = e.target as HTMLInputElement;
     let value = input.value.replace(/\D/g, '');
     if (value.length > 11) {
       value = value.slice(0, 11);
@@ -420,83 +419,135 @@
     validateContactNo();
   }
 
-  // ── Category ID file handlers ───────────────────────────
-  /** @param {Event} e */
-  function handlePwdIdChange(e) {
-    const input = /** @type {HTMLInputElement} */ (e.target);
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      fieldErrors.pwdIdFile = 'File must be less than 5MB';
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      fieldErrors.pwdIdFile = 'Please select an image file';
-      return;
-    }
-    pwdIdFile = file;
-    fieldErrors.pwdIdFile = '';
-    const reader = new FileReader();
-    reader.onload = (ev) => { pwdIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
-    reader.readAsDataURL(file);
+// Replace your handlePwdIdChange with this:
+function handlePwdIdChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  
+  console.log('PWD file selected on mobile:', file ? file.name : 'No file');
+  
+  if (!file) {
+    // Mobile fallback - try to get file again after a short delay
+    setTimeout(() => {
+      const retryInput = document.getElementById('pwdIdFileInput') as HTMLInputElement;
+      if (retryInput && retryInput.files && retryInput.files[0]) {
+        const retryFile = retryInput.files[0];
+        processPwdFile(retryFile);
+      }
+    }, 100);
+    return;
   }
+  
+  processPwdFile(file);
+}
 
-  /** @param {Event} e */
-  function handleSeniorIdChange(e) {
-    const input = /** @type {HTMLInputElement} */ (e.target);
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      fieldErrors.seniorIdFile = 'File must be less than 5MB';
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      fieldErrors.seniorIdFile = 'Please select an image file';
-      return;
-    }
-    seniorIdFile = file;
-    fieldErrors.seniorIdFile = '';
-    const reader = new FileReader();
-    reader.onload = (ev) => { seniorIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
-    reader.readAsDataURL(file);
+// Add this new function to process the file
+function processPwdFile(file: File) {
+  console.log('Processing PWD file:', file.name, file.size);
+  
+  if (file.size > 5 * 1024 * 1024) {
+    fieldErrors.pwdIdFile = 'File must be less than 5MB';
+    return;
   }
-
-  /** @param {Event} e */
-  function handleSingleParentIdChange(e) {
-    const input = /** @type {HTMLInputElement} */ (e.target);
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      fieldErrors.singleParentIdFile = 'File must be less than 5MB';
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      fieldErrors.singleParentIdFile = 'Please select an image file';
-      return;
-    }
-    singleParentIdFile = file;
-    fieldErrors.singleParentIdFile = '';
-    const reader = new FileReader();
-    reader.onload = (ev) => { singleParentIdPreview = /** @type {string} */ (ev.target?.result ?? ''); };
-    reader.readAsDataURL(file);
+  if (!file.type.startsWith('image/')) {
+    fieldErrors.pwdIdFile = 'Please select an image file';
+    return;
   }
+  
+  pwdIdFile = file;
+  console.log('pwdIdFile stored:', pwdIdFile ? 'Yes' : 'No');
+  fieldErrors.pwdIdFile = '';
+  
+  const reader = new FileReader();
+  reader.onload = (ev) => { 
+    pwdIdPreview = (ev.target?.result as string) ?? '';
+    console.log('PWD preview created, length:', pwdIdPreview.length);
+  };
+  reader.readAsDataURL(file);
+}
 
-    /**
-   * @param {number} lat
-   * @param {number} lng
-   * @param {number} accuracy
-   */
+// Do the same for Senior
+function handleSeniorIdChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  
+  if (!file) {
+    setTimeout(() => {
+      const retryInput = document.getElementById('seniorIdFileInput') as HTMLInputElement;
+      if (retryInput && retryInput.files && retryInput.files[0]) {
+        processSeniorFile(retryInput.files[0]);
+      }
+    }, 100);
+    return;
+  }
+  
+  processSeniorFile(file);
+}
 
-  // ── GPS Functions (FIXED) ─────────────────────────────────
-  function isValidLocation(lat, lng, accuracy) {
+function processSeniorFile(file: File) {
+  if (file.size > 5 * 1024 * 1024) {
+    fieldErrors.seniorIdFile = 'File must be less than 5MB';
+    return;
+  }
+  if (!file.type.startsWith('image/')) {
+    fieldErrors.seniorIdFile = 'Please select an image file';
+    return;
+  }
+  
+  seniorIdFile = file;
+  fieldErrors.seniorIdFile = '';
+  
+  const reader = new FileReader();
+  reader.onload = (ev) => { seniorIdPreview = (ev.target?.result as string) ?? ''; };
+  reader.readAsDataURL(file);
+}
+
+
+// Do the same for Single Parent
+function handleSingleParentIdChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  
+  if (!file) {
+    setTimeout(() => {
+      const retryInput = document.getElementById('singleParentIdFileInput') as HTMLInputElement;
+      if (retryInput && retryInput.files && retryInput.files[0]) {
+        processSingleParentFile(retryInput.files[0]);
+      }
+    }, 100);
+    return;
+  }
+  
+  processSingleParentFile(file);
+}
+
+function processSingleParentFile(file: File) {
+  if (file.size > 5 * 1024 * 1024) {
+    fieldErrors.singleParentIdFile = 'File must be less than 5MB';
+    return;
+  }
+  if (!file.type.startsWith('image/')) {
+    fieldErrors.singleParentIdFile = 'Please select an image file';
+    return;
+  }
+  
+  singleParentIdFile = file;
+  fieldErrors.singleParentIdFile = '';
+  
+  const reader = new FileReader();
+  reader.onload = (ev) => { singleParentIdPreview = (ev.target?.result as string) ?? ''; };
+  reader.readAsDataURL(file);
+}
+
+  // ── GPS Functions ─────────────────────────────────────
+  function isValidLocation(lat: number, lng: number, accuracy: number): boolean {
     if (isNaN(lat) || isNaN(lng)) return false;
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
-    if (accuracy > 1000) return false; // Filter out very inaccurate readings
+    if (accuracy > 1000) return false;
     
-    // Check if location jumped too far (more than 500 meters)
     if (lastLocation) {
       const distance = calculateDistance(lastLocation.lat, lastLocation.lng, lat, lng);
-      if (distance > 0.5) { // More than 500m jump
+      if (distance > 0.5) {
         console.log('Location jump too large:', distance, 'km');
         return false;
       }
@@ -505,15 +556,8 @@
     return true;
   }
 
-         /**
-   * @param {number} lat1
-   * @param {number} lon1
-   * @param {number} lat2
-   * @param {number} lon2
-   */
-
-  function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Earth's radius in km
+  function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -535,17 +579,14 @@
   }
 
   function requestGPSEnhanced() {
-    // Check if geolocation is available
     if (!navigator.geolocation) {
       gpsStatus = 'error';
       gpsMessage = 'Geolocation is not supported by your browser.';
       return;
     }
 
-    // Stop any existing GPS requests
     stopGPS();
     
-    // Reset state
     gpsStatus = 'pending';
     gpsAttempt = 0;
     gpsRetryCount = 0;
@@ -553,7 +594,6 @@
     lastLocation = null;
     gpsMessage = 'Requesting GPS location... (attempt 1/' + maxGpsRetries + ')';
 
-    // Set timeout for overall GPS acquisition (45 seconds)
     maxWatchTimeout = setTimeout(() => {
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -566,49 +606,43 @@
       }
     }, 45000);
 
-    // Start watching position
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const newLat      = pos.coords.latitude;
-        const newLng      = pos.coords.longitude;
+        const newLat = pos.coords.latitude;
+        const newLng = pos.coords.longitude;
         const newAccuracy = Math.round(pos.coords.accuracy * 10) / 10;
 
         console.log(`GPS Update ${gpsAttempt + 1}:`, { lat: newLat, lng: newLng, accuracy: newAccuracy });
 
-        // Validate location
         if (!isValidLocation(newLat, newLng, newAccuracy)) {
           console.log('Invalid location, ignoring');
           return;
         }
 
-        // Update last location
         lastLocation = { lat: newLat, lng: newLng, accuracy: newAccuracy };
         
-        // Update GPS values
-        gpsLat      = newLat;
-        gpsLng      = newLng;
+        gpsLat = newLat;
+        gpsLng = newLng;
         gpsAccuracy = newAccuracy;
 
-        // Track best accuracy
         if (bestAccuracy === null || newAccuracy < bestAccuracy) {
           bestAccuracy = newAccuracy;
         }
 
         gpsAttempt++;
 
-        // Success conditions based on accuracy
-        if (newAccuracy <= 15) { // Excellent accuracy
+        if (newAccuracy <= 15) {
           gpsStatus = 'granted';
           gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
           gpsRetryCount = 0;
-          stopGPS(); // Stop watching, we have good location
+          stopGPS();
         } 
-        else if (newAccuracy <= 30 && gpsAttempt >= 2) { // Good accuracy after multiple attempts
+        else if (newAccuracy <= 30 && gpsAttempt >= 2) {
           gpsStatus = 'granted';
           gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
           stopGPS();
         }
-        else if (gpsAttempt >= maxGpsRetries) { // Max attempts reached
+        else if (gpsAttempt >= maxGpsRetries) {
           gpsStatus = 'granted';
           gpsMessage = `📍 Location locked (±${newAccuracy}m - Best effort)`;
           stopGPS();
@@ -631,7 +665,6 @@
           gpsRetryCount++;
           if (gpsRetryCount < 3) {
             gpsMessage = `GPS unavailable (attempt ${gpsRetryCount}/3). Please go outdoors.`;
-            // Don't stop, keep trying
           } else {
             gpsStatus = 'error';
             gpsMessage = 'GPS unavailable. Please go outdoors and ensure GPS is enabled.';
@@ -642,7 +675,6 @@
           gpsRetryCount++;
           if (gpsRetryCount < 3) {
             gpsMessage = `GPS timeout (attempt ${gpsRetryCount}/3). Moving outdoors may help.`;
-            // Keep watching
           } else {
             gpsStatus = 'error';
             gpsMessage = 'GPS request timed out. Move to an open area and try again.';
@@ -657,7 +689,7 @@
       },
       { 
         enableHighAccuracy: true, 
-        timeout: 15000,  // 15 second timeout per attempt
+        timeout: 15000,
         maximumAge: 0 
       }
     );
@@ -672,50 +704,51 @@
     requestGPSEnhanced();
   }
 
-  // ── SINGLE onMount (fixes the duplicate onMount bug) ────
-  onMount(() => {
-    const currentQrId = window.location.pathname.split('/').pop() ?? '';
+// ── SINGLE onMount ────
+onMount(() => {
+  const currentQrId = window.location.pathname.split('/').pop() ?? '';
 
-    // Start GPS immediately
-    requestGPSEnhanced();
-    
-    if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
+  requestGPSEnhanced();
+  
+  if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
 
-    (async () => {
-      try {
-        const { db } = await import('$lib/firebase');
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
+  (async () => {
+    try {
+      const { db } = await import('$lib/firebase');
+      const { collection, query, where, getDocs } = await import('firebase/firestore');
 
-        const snap = await getDocs(
-          query(collection(db, 'households'), where('qrId', '==', currentQrId))
-        );
+      const snap = await getDocs(
+        query(collection(db, 'households'), where('qrId', '==', currentQrId))
+      );
 
-        if (snap.empty) {
-          householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
-        } else {
-          household = { id: snap.docs[0].id, ...snap.docs[0].data() };
-          if (household?.houseNo) houseNo = household.houseNo;
-          if (household?.street)  street  = household.street;
-          if (household?.zone)    purok   = household.zone;
-        }
-      } catch (e) {
-        householdError = 'Could not load household info. Please check your internet connection.';
-        console.error(e);
-      } finally {
-        householdLoading = false;
+      if (snap.empty) {
+        householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
+      } else {
+        const docData = snap.docs[0].data();
+        household = { 
+          id: snap.docs[0].id, 
+          ...docData 
+        } as Household;
+        if (household?.houseNo) houseNo = household.houseNo;
+        if (household?.street) street = household.street;
+        if (household?.zone) purok = household.zone;
       }
-    })();
+    } catch (e) {
+      householdError = 'Could not load household info. Please check your internet connection.';
+      console.error(e);
+    } finally {
+      householdLoading = false;
+    }
+  })();
 
-    // Cleanup function — runs when component is destroyed
-    return () => {
-      stopGPS();
-    };
-  });
+  return () => {
+    stopGPS();
+  };
+});
 
   // ── House photo handler ────────────────────────────────
-  /** @param {Event} e */
-  function handlePhotoChange(e) {
-    const input = /** @type {HTMLInputElement} */ (e.target);
+  function handlePhotoChange(e: Event) {
+    const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -729,33 +762,40 @@
     housePhoto = file;
     fieldErrors.housePhoto = '';
     const reader = new FileReader();
-    reader.onload = (ev) => { housePhotoPreview = /** @type {string} */ (ev.target?.result ?? ''); };
+    reader.onload = (ev) => { housePhotoPreview = (ev.target?.result as string) ?? ''; };
     reader.readAsDataURL(file);
   }
 
-  // ── Helper function to compress image ───────────────────
-  /** @param {File} file */
-  async function compressImage(file) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      img.onload = () => {
-        const maxW = 800, maxH = 600;
-        let w = img.width, h = img.height;
-        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-        if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
-        const canvas = document.createElement('canvas');
-        canvas.width  = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(objectUrl);
-        resolve(canvas.toDataURL('image/jpeg', 0.6));
-      };
-      img.onerror = () => resolve('');
-      img.src = objectUrl;
-    });
-  }
+// ── Helper function to compress image ───────────────────
+async function compressImage(file: File): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    
+    img.onload = () => {
+      const maxW = 800, maxH = 600;
+      let w = img.width, h = img.height;
+      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(objectUrl);
+      const base64Data = canvas.toDataURL('image/jpeg', 0.7);
+      console.log('Compressed image size:', base64Data.length);
+      resolve(base64Data);
+    };
+    
+    img.onerror = (err) => {
+      console.error('Image load error:', err);
+      resolve(null);
+    };
+    
+    img.src = objectUrl;
+  });
+}
 
   // ── Step navigation with validation ────────────────────
   function nextStep() {
@@ -783,90 +823,126 @@
     step--;
   }
 
-  // ── Submit ────────────────────────────────────────────
-  async function handleSubmit() {
-    errorMsg = '';
-    
-    const isStep1Valid = validateStep1();
-    const isStep2Valid = validateStep2();
-    const isStep3Valid = validateStep3();
-    
-    if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
-      errorMsg = 'Please complete all required fields correctly before submitting';
-      if (!isStep1Valid) {
-        step = 1;
-        setTimeout(() => scrollToFirstError(), 100);
-      } else if (!isStep2Valid) {
-        step = 2;
-        setTimeout(() => scrollToFirstError(), 100);
-      } else if (!isStep3Valid) {
-        step = 3;
-        setTimeout(() => scrollToFirstError(), 100);
-      }
-      return;
+// ── Submit ────────────────────────────────────────────
+// ── Submit ────────────────────────────────────────────
+async function handleSubmit() {
+  errorMsg = '';
+  
+  const isStep1Valid = validateStep1();
+  const isStep2Valid = validateStep2();
+  const isStep3Valid = validateStep3();
+  
+  if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
+    errorMsg = 'Please complete all required fields correctly before submitting';
+    if (!isStep1Valid) {
+      step = 1;
+      setTimeout(() => scrollToFirstError(), 100);
+    } else if (!isStep2Valid) {
+      step = 2;
+      setTimeout(() => scrollToFirstError(), 100);
+    } else if (!isStep3Valid) {
+      step = 3;
+      setTimeout(() => scrollToFirstError(), 100);
     }
-
-    loading = true;
-    try {
-      const { db } = await import('$lib/firebase');
-      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-
-      // Compress all images
-      const housePhotoUrl     = housePhoto        ? await compressImage(housePhoto)        : '';
-      const pwdIdUrl          = pwdIdFile         ? await compressImage(pwdIdFile)         : '';
-      const seniorIdUrl       = seniorIdFile      ? await compressImage(seniorIdFile)      : '';
-      const singleParentIdUrl = singleParentIdFile ? await compressImage(singleParentIdFile) : '';
-
-      await addDoc(collection(db, 'residents'), {
-        householdId:         household?.id ?? null,
-        qrId,
-        firstName:           firstName.trim(),
-        lastName:            lastName.trim(),
-        middleName:          middleName.trim(),
-        name:                `${firstName.trim()} ${lastName.trim()}`,
-        birthdate,
-        age:                 age ?? 0,
-        sex,
-        civilStatus,
-        contactNo:           contactNo.trim(),
-        houseNo:             houseNo.trim(),
-        street,
-        purok,
-        zone:                purok,
-        sector:              purok,
-        landmark:            household?.landmark ?? '',
-        barangay:            'Barangay Pag-Asa',
-        city:                'Olongapo City',
-        province:            'Zambales',
-        region:              'Region III - Central Luzon',
-        address:             fullAddress,
-        isPWD,
-        isSenior,
-        isSingleParent,
-        pwdType:             isPWD ? pwdType : '',
-        pwdIdProof:          isPWD         ? pwdIdUrl          : '',
-        seniorIdProof:       isSenior      ? seniorIdUrl       : '',
-        singleParentIdProof: isSingleParent ? singleParentIdUrl : '',
-        lat:                 gpsLat,
-        lng:                 gpsLng,
-        gpsAccuracy,
-        bestAccuracy,
-        gpsAttempts:         gpsAttempt,
-        photoUrl:            housePhotoUrl,
-        status:              'pending',
-        submittedAt:         serverTimestamp(),
-        encodedBy:           null,
-      });
-
-      submitted = true;
-      localStorage.removeItem('last_qr_id');
-    } catch (e) {
-      errorMsg = 'Submission failed. Please check your internet and try again.';
-      console.error(e);
-    } finally {
-      loading = false;
-    }
+    return;
   }
+
+  loading = true;
+  try {
+    const { db } = await import('$lib/firebase');
+    const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+
+    // Debug: Log file status before compression
+    console.log('=== FILE STATUS BEFORE COMPRESSION ===');
+    console.log('PWD File:', pwdIdFile ? { name: pwdIdFile.name, size: pwdIdFile.size, type: pwdIdFile.type } : 'null');
+    console.log('Senior File:', seniorIdFile ? { name: seniorIdFile.name, size: seniorIdFile.size, type: seniorIdFile.type } : 'null');
+    console.log('Single Parent File:', singleParentIdFile ? { name: singleParentIdFile.name, size: singleParentIdFile.size, type: singleParentIdFile.type } : 'null');
+    console.log('House Photo:', housePhoto ? { name: housePhoto.name, size: housePhoto.size, type: housePhoto.type } : 'null');
+    console.log('=========================================');
+
+    // Compress images
+    console.log('Starting image compression...');
+    const housePhotoUrl = housePhoto ? await compressImage(housePhoto) : null;
+    const pwdIdUrl = pwdIdFile ? await compressImage(pwdIdFile) : null;
+    const seniorIdUrl = seniorIdFile ? await compressImage(seniorIdFile) : null;
+    const singleParentIdUrl = singleParentIdFile ? await compressImage(singleParentIdFile) : null;
+
+    console.log('Compression results:', {
+      housePhotoUrl: housePhotoUrl ? 'Has data (length: ' + housePhotoUrl.length + ')' : 'null',
+      pwdIdUrl: pwdIdUrl ? 'Has data (length: ' + pwdIdUrl.length + ')' : 'null',
+      seniorIdUrl: seniorIdUrl ? 'Has data' : 'null',
+      singleParentIdUrl: singleParentIdUrl ? 'Has data' : 'null'
+    });
+
+    // Build resident data object
+    const residentData = {
+      householdId: household?.id ?? null,
+      qrId,
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      middleName: middleName.trim(),
+      extensionName: extensionName,
+      name: fullName,
+      birthdate,
+      placeOfBirth: placeOfBirth.trim(),
+      age: age ?? 0,
+      sex,
+      civilStatus,
+      citizenship: citizenship.trim(),
+      occupation: occupation.trim(),
+      contactNo: contactNo.trim(),
+      houseNo: houseNo.trim(),
+      street,
+      purok,
+      zone: purok,
+      sector: purok,
+      landmark: household?.landmark ?? '',
+      barangay: 'Barangay Pag-Asa',
+      city: 'Olongapo City',
+      province: 'Zambales',
+      region: 'Region III - Central Luzon',
+      address: fullAddress,
+      isPWD,
+      isSenior,
+      isSingleParent,
+      pwdType: isPWD ? pwdType : null,
+      // Store the compressed base64 strings (will be null if no file)
+      pwdIdProof: pwdIdUrl,
+      seniorIdProof: seniorIdUrl,
+      singleParentIdProof: singleParentIdUrl,
+      lat: gpsLat,
+      lng: gpsLng,
+      gpsAccuracy,
+      bestAccuracy,
+      gpsAttempts: gpsAttempt,
+      photoUrl: housePhotoUrl,
+      status: 'pending',
+      submittedAt: serverTimestamp(),
+      encodedBy: null,
+    };
+
+    console.log('Final residentData ready for save:', {
+      isPWD: residentData.isPWD,
+      pwdIdProof: residentData.pwdIdProof ? 'Has base64 data (length: ' + residentData.pwdIdProof.length + ')' : 'null',
+      isSenior: residentData.isSenior,
+      seniorIdProof: residentData.seniorIdProof ? 'Has base64 data' : 'null',
+      isSingleParent: residentData.isSingleParent,
+      singleParentIdProof: residentData.singleParentIdProof ? 'Has base64 data' : 'null',
+      photoUrl: residentData.photoUrl ? 'Has base64 data' : 'null'
+    });
+
+    await addDoc(collection(db, 'residents'), residentData);
+
+    submitted = true;
+    localStorage.removeItem('last_qr_id');
+  } catch (e) {
+    errorMsg = 'Submission failed. Please check your internet and try again.';
+    console.error(e);
+  } finally {
+    loading = false;
+  }
+}
+
 </script>
 
 <!-- PWA meta -->
@@ -970,8 +1046,10 @@
       </p>
       <div class="w-full max-w-xs bg-slate-100 rounded-2xl p-4 text-left space-y-2">
         <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Submitted Info</p>
-        <p class="text-sm font-bold text-slate-700">{firstName} {lastName}</p>
+        <p class="text-sm font-bold text-slate-700">{fullName}</p>
+        <p class="text-xs text-slate-500">{placeOfBirth ? `Born in ${placeOfBirth}` : ''}</p>
         <p class="text-xs text-slate-500">{fullAddress}</p>
+        {#if occupation}<p class="text-xs text-slate-500">Occupation: {occupation}</p>{/if}
         <div class="flex gap-1.5 flex-wrap mt-1">
           {#if isPWD}<span class="text-[0.65rem] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">PWD</span>{/if}
           {#if isSenior}<span class="text-[0.65rem] font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Senior Citizen</span>{/if}
@@ -1006,7 +1084,7 @@
         </div>
       </div>
 
-      <!-- GPS Status Banner (FIXED) -->
+      <!-- GPS Status Banner -->
       {#if gpsStatus === 'pending'}
         <div class="flex items-start gap-2.5 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
           <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1063,7 +1141,6 @@
               class="text-xs font-bold text-amber-700 underline hover:text-amber-800 mt-1">
               🔄 Tap to retry GPS
             </button>
-            <!-- <p class="text-xs text-amber-600 mt-0.5">You can still submit without GPS</p> -->
           </div>
         </div>
       {/if}
@@ -1106,6 +1183,41 @@
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
           <h3 class="font-nunito font-extrabold text-slate-700">Personal Information</h3>
 
+          <!-- Last Name + Extension Name -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Last Name <span class="text-red-400">*</span></label>
+              <input id="lastNameInput" type="text" bind:value={lastName}
+                on:blur={() => { touchedFields.lastName = true; validateLastName(); }}
+                placeholder="Dela Cruz"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.lastName ? 'error-border' : (touchedFields.lastName && !fieldErrors.lastName && lastName ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.lastName}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.lastName}</p>
+              {:else if touchedFields.lastName && lastName && !fieldErrors.lastName}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
+            </div>
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Extension Name</label>
+              <div class="relative">
+                <select bind:value={extensionName}
+                  class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer">
+                  <option value="">None</option>
+                  <option>Jr.</option>
+                  <option>Sr.</option>
+                  <option>II</option>
+                  <option>III</option>
+                  <option>IV</option>
+                </select>
+                <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- First Name + Middle Name -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">First Name <span class="text-red-400">*</span></label>
@@ -1121,44 +1233,42 @@
               {/if}
             </div>
             <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Last Name <span class="text-red-400">*</span></label>
-              <input id="lastNameInput" type="text" bind:value={lastName}
-                on:blur={() => { touchedFields.lastName = true; validateLastName(); }}
-                placeholder="Dela Cruz"
-                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
-                {fieldErrors.lastName ? 'error-border' : (touchedFields.lastName && !fieldErrors.lastName && lastName ? 'valid-border' : 'border-slate-200')}" />
-              {#if fieldErrors.lastName}
-                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.lastName}</p>
-              {:else if touchedFields.lastName && lastName && !fieldErrors.lastName}
-                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
-              {/if}
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Middle Name</label>
+              <input id="middleNameInput" type="text" bind:value={middleName} placeholder="Santos (optional)"
+                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
             </div>
           </div>
 
-          <div>
-            <label for="middleNameInput" class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Middle Name</label>
-            <input id="middleNameInput" type="text" bind:value={middleName} placeholder="Santos (optional)"
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+          <!-- Birthdate + Place of Birth -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Birthdate <span class="text-red-400">*</span></label>
+              <input id="birthdateInput" type="date" bind:value={birthdate}
+                on:blur={() => { touchedFields.birthdate = true; validateBirthdate(); }}
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.birthdate ? 'error-border' : (touchedFields.birthdate && !fieldErrors.birthdate && birthdate ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.birthdate}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.birthdate}</p>
+              {:else if touchedFields.birthdate && birthdate && !fieldErrors.birthdate}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
+            </div>
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Place of Birth</label>
+              <input type="text" bind:value={placeOfBirth}
+                placeholder="e.g. Olongapo City"
+                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+              <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">City/Municipality, Province</p>
+            </div>
           </div>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Birthdate <span class="text-red-400">*</span></label>
-            <input id="birthdateInput" type="date" bind:value={birthdate}
-              on:blur={() => { touchedFields.birthdate = true; validateBirthdate(); }}
-              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
-              {fieldErrors.birthdate ? 'error-border' : (touchedFields.birthdate && !fieldErrors.birthdate && birthdate ? 'valid-border' : 'border-slate-200')}" />
-            {#if fieldErrors.birthdate}
-              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.birthdate}</p>
-            {:else if touchedFields.birthdate && birthdate && !fieldErrors.birthdate}
-              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
-            {/if}
-            {#if age !== null && !fieldErrors.birthdate && ageInDays !== null && ageInDays >= 30}
-              <p class="text-xs text-slate-400 mt-1.5 ml-1">Age: <span class="font-bold text-slate-600">{age} years old</span>
-                {#if age >= 60}<span class="ml-1 text-emerald-600 font-bold">· Senior Citizen ✓</span>{/if}
-              </p>
-            {/if}
-          </div>
+          {#if age !== null && !fieldErrors.birthdate && ageInDays !== null && ageInDays >= 30}
+            <p class="text-xs text-slate-400 -mt-2 ml-1">Age: <span class="font-bold text-slate-600">{age} years old</span>
+              {#if age >= 60}<span class="ml-1 text-emerald-600 font-bold">· Senior Citizen ✓</span>{/if}
+            </p>
+          {/if}
 
+          <!-- Sex + Civil Status -->
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Sex <span class="text-red-400">*</span></label>
@@ -1204,19 +1314,37 @@
             </div>
           </div>
 
+          <!-- Citizenship + Contact Number -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Citizenship</label>
+              <input type="text" bind:value={citizenship}
+                placeholder="Filipino"
+                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+            </div>
+            <div>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Contact Number</label>
+              <input id="contactNoInput" type="tel" bind:value={contactNo}
+                on:input={handleContactNoInput}
+                on:blur={() => { touchedFields.contactNo = true; validateContactNo(); }}
+                placeholder="09123456789" maxlength="11"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.contactNo ? 'error-border' : (touchedFields.contactNo && contactNo && !fieldErrors.contactNo ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.contactNo}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.contactNo}</p>
+              {:else if touchedFields.contactNo && contactNo && !fieldErrors.contactNo}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Occupation -->
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Contact Number</label>
-            <input id="contactNoInput" type="tel" bind:value={contactNo}
-              on:input={handleContactNoInput}
-              on:blur={() => { touchedFields.contactNo = true; validateContactNo(); }}
-              placeholder="09123456789" maxlength="11"
-              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
-              {fieldErrors.contactNo ? 'error-border' : (touchedFields.contactNo && contactNo && !fieldErrors.contactNo ? 'valid-border' : 'border-slate-200')}" />
-            {#if fieldErrors.contactNo}
-              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.contactNo}</p>
-            {:else if touchedFields.contactNo && contactNo && !fieldErrors.contactNo}
-              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
-            {/if}
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Profession / Occupation</label>
+            <input type="text" bind:value={occupation}
+              placeholder="e.g. Government Employee, Student, Nurse, N/A"
+              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+            <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">Write N/A if not currently employed</p>
           </div>
         </div>
 
@@ -1560,10 +1688,14 @@
             {/if}
           </div>
 
+          <!-- Review Summary -->
           <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-2">Review Your Info</p>
-            <p class="text-sm font-bold text-slate-700">{firstName} {lastName}</p>
+            <p class="text-sm font-bold text-slate-700">{fullName}</p>
             <p class="text-xs text-slate-500">{sex} · {age} yrs old · {civilStatus}</p>
+            {#if placeOfBirth}<p class="text-xs text-slate-500">Born in: {placeOfBirth}</p>{/if}
+            {#if citizenship && citizenship !== 'Filipino'}<p class="text-xs text-slate-500">Citizenship: {citizenship}</p>{/if}
+            {#if occupation}<p class="text-xs text-slate-500">Occupation: {occupation}</p>{/if}
             <p class="text-xs text-slate-500">{fullAddress || 'Barangay Pag-Asa, Olongapo City, Zambales'}</p>
             <div class="flex gap-1.5 flex-wrap mt-1">
               {#if isPWD}<span class="text-[0.65rem] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">PWD</span>{/if}

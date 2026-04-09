@@ -1,5 +1,6 @@
 <!-- src/lib/components/ResidentProfileModal.svelte -->
-<!-- Shared profile modal — used by both /admin/residents and /admin/mapView -->
+<!-- Updated to show staff name who created the QR code -->
+
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
 
@@ -34,15 +35,78 @@
     singleParentIdProof?: string;
     submittedAt?: { toDate(): Date } | Date | string;
     encodedBy?: string;
+    householdId?: string;
+    placeOfBirth?: string;
+    occupation?: string;
+    citizenship?: string;
+    extensionName?: string;
   }
 
-  /** The resident object to display. Pass null to hide the modal. */
   export let resident: Resident | null = null;
 
   const dispatch = createEventDispatcher<{
     close: void;
     statusChange: { id: string; status: 'approved' | 'declined' };
   }>();
+
+  // ── Staff information from QR code ─────────────────────
+  let qrStaffName: string = '';
+  interface HouseholdInfo {
+    id?: string;
+    createdByName?: string;
+    createdBy?: string;
+    houseNo?: string;
+    qrId?: string;
+    [key: string]: unknown;
+  }
+  let householdInfo: HouseholdInfo | null = null;
+  let loadingStaff = false;
+
+  // ── Fetch staff name from household document ───────────
+  async function fetchStaffFromHousehold() {
+    if (!resident?.householdId) return;
+    
+    loadingStaff = true;
+    try {
+      const { db } = await import('$lib/firebase');
+      const { doc, getDoc } = await import('firebase/firestore');
+      
+      const householdDoc = await getDoc(doc(db, 'households', resident.householdId));
+      
+      if (householdDoc.exists()) {
+        householdInfo = { id: householdDoc.id, ...householdDoc.data() };
+        
+        // First check if createdByName exists (from updated QR generator)
+        if (householdInfo.createdByName) {
+          qrStaffName = householdInfo.createdByName;
+        } 
+        // Fallback: fetch from users collection
+        else if (householdInfo.createdBy) {
+          
+          const userDoc = await getDoc(doc(db, 'users', householdInfo.createdBy as string));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            qrStaffName = userData.name || userData.displayName || userData.email || (householdInfo.createdBy as string);
+          } else {
+            qrStaffName = householdInfo.createdBy as string;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching household staff info:', error);
+      qrStaffName = 'Unknown';
+    } finally {
+      loadingStaff = false;
+    }
+  }
+
+  // Watch for resident changes and fetch staff info
+  $: if (resident) {
+    fetchStaffFromHousehold();
+    showPhotoLightbox = false;
+    lightboxSrc = '';
+    lightboxLabel = '';
+  }
 
   // ── Photo lightbox ─────────────────────────────────────
   let showPhotoLightbox = false;
@@ -55,41 +119,54 @@
     action: 'approve' | 'decline';
   } = { open: false, action: 'approve' };
 
-  // ── Reactive: close lightbox when resident changes ─────
-  $: if (resident) { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }
-
   // ── Maps URLs ──────────────────────────────────────────
   $: mapSrc = (resident?.lat && resident?.lng)
     ? `https://maps.google.com/maps?q=${resident.lat},${resident.lng}&z=17&output=embed`
     : null;
 
-  // ── Proof images list (only sectors resident belongs to) ──
-  $: proofImages = (() => {
-    if (!resident) return [];
-    const list: { label: string; src: string; color: string; icon: string }[] = [];
-    if (resident.isPWD)
-      list.push({
-        label: `PWD ID Proof${resident.pwdType ? ` — ${resident.pwdType}` : ''}`,
-        src: resident.pwdIdProof ?? '',
-        color: 'amber',
-        icon: '♿',
-      });
-    if (resident.isSenior)
-      list.push({
-        label: 'Senior Citizen ID Proof',
-        src: resident.seniorIdProof ?? '',
-        color: 'emerald',
-        icon: '🧓',
-      });
-    if (resident.isSingleParent)
-      list.push({
-        label: 'Single Parent ID Proof',
-        src: resident.singleParentIdProof ?? '',
-        color: 'violet',
-        icon: '👤',
-      });
-    return list;
-  })();
+  // ── Proof images list (only sectors resident belongs to AND has proof) ──
+$: proofImages = (() => {
+  if (!resident) return [];
+  const list: { label: string; src: string; color: string; icon: string; hasProof: boolean }[] = [];
+  
+  // Check PWD - only add if has proof image (not null, not empty)
+  if (resident.isPWD) {
+    const hasProof = !!(resident.pwdIdProof && resident.pwdIdProof !== '');
+    list.push({
+      label: `PWD ID Proof${resident.pwdType ? ` — ${resident.pwdType}` : ''}`,
+      src: resident.pwdIdProof ?? '',
+      color: 'amber',
+      icon: '♿',
+      hasProof: hasProof
+    });
+  }
+  
+  // Check Senior - only add if has proof image (not null, not empty)
+  if (resident.isSenior) {
+    const hasProof = !!(resident.seniorIdProof && resident.seniorIdProof !== '');
+    list.push({
+      label: 'Senior Citizen ID Proof',
+      src: resident.seniorIdProof ?? '',
+      color: 'emerald',
+      icon: '🧓',
+      hasProof: hasProof
+    });
+  }
+  
+  // Check Single Parent - only add if has proof image (not null, not empty)
+  if (resident.isSingleParent) {
+    const hasProof = !!(resident.singleParentIdProof && resident.singleParentIdProof !== '');
+    list.push({
+      label: 'Single Parent ID Proof',
+      src: resident.singleParentIdProof ?? '',
+      color: 'violet',
+      icon: '👤',
+      hasProof: hasProof
+    });
+  }
+  
+  return list;
+})();
 
   // ── Keyboard handler ───────────────────────────────────
   function handleKeydown(e: KeyboardEvent) {
@@ -315,6 +392,66 @@
               </div>
             </div>
 
+            <!-- Citizenship -->
+{#if resident.citizenship && resident.citizenship !== 'Filipino'}
+  <div class="flex items-center gap-4 px-6 py-4">
+    <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
+      <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <div>
+      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Citizenship</p>
+      <p class="text-sm font-bold text-slate-700">{resident.citizenship}</p>
+    </div>
+  </div>
+{/if}
+
+<!-- Place of Birth -->
+{#if resident.placeOfBirth}
+  <div class="flex items-center gap-4 px-6 py-4">
+    <div class="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+      <svg class="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <div>
+      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Place of Birth</p>
+      <p class="text-sm font-bold text-slate-700">{resident.placeOfBirth}</p>
+    </div>
+  </div>
+{/if}
+
+<!-- Occupation -->
+{#if resident.occupation}
+  <div class="flex items-center gap-4 px-6 py-4">
+    <div class="w-9 h-9 rounded-xl bg-cyan-50 flex items-center justify-center shrink-0">
+      <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+      </svg>
+    </div>
+    <div>
+      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Occupation</p>
+      <p class="text-sm font-bold text-slate-700">{resident.occupation}</p>
+    </div>
+  </div>
+{/if}
+
+<!-- Extension Name -->
+{#if resident.extensionName}
+  <div class="flex items-center gap-4 px-6 py-4">
+    <div class="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+      <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+    </div>
+    <div>
+      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Name Extension</p>
+      <p class="text-sm font-bold text-slate-700">{resident.extensionName}</p>
+    </div>
+  </div>
+{/if}
+
             <!-- GPS -->
             <div class="flex items-center gap-4 px-6 py-4">
               <div class="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
@@ -371,7 +508,48 @@
               </div>
             </div>
 
-            <!-- Submitted By -->
+            <!-- QR Code Created By (for QR-registered residents) -->
+            {#if resident.householdId && !resident.encodedBy}
+              <div class="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+                <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                  <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 4h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <p class="text-[0.6rem] font-bold uppercase tracking-widest text-blue-600">QR Code Created By</p>
+                  {#if loadingStaff}
+                    <p class="text-sm font-bold text-slate-500 flex items-center gap-2">
+                      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                      </svg>
+                      Loading staff info...
+                    </p>
+                  {:else if qrStaffName}
+                    <p class="text-sm font-bold text-slate-700">
+                      {qrStaffName}
+                    </p>
+                    {#if householdInfo?.houseNo}
+                      <p class="text-xs text-slate-500 mt-0.5">
+                        House No. {householdInfo.houseNo} • QR: {householdInfo.qrId}
+                      </p>
+                    {/if}
+                  {:else}
+                    <p class="text-sm font-medium text-slate-500 italic">Staff information unavailable</p>
+                  {/if}
+                </div>
+                {#if householdInfo?.qrId}
+                  <div class="text-right shrink-0">
+                    <span class="text-[0.6rem] font-mono font-bold text-blue-500 bg-blue-100 px-2 py-1 rounded-lg">
+                      {householdInfo.qrId}
+                    </span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Submitted By (Staff or Self) -->
             <div class="flex items-center gap-4 px-6 py-4">
               <div class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
                 <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -383,6 +561,11 @@
                 <p class="text-sm font-bold text-slate-700">
                   {#if resident.encodedBy}
                     {resident.encodedBy} (Staff)
+                  {:else if resident.householdId}
+                    <span class="text-green-600">✓ Self-registered via QR</span>
+                    {#if qrStaffName}
+                      <span class="text-xs text-slate-500 block mt-0.5">QR generated by: {qrStaffName}</span>
+                    {/if}
                   {:else}
                     <span class="text-slate-400 font-normal italic">Self-registered via QR</span>
                   {/if}
@@ -423,63 +606,53 @@
             </div>
 
             <!-- ══ SECTOR ID PROOF IMAGES ══════════════════════════════ -->
-            <!--
-              Only renders when the resident belongs to at least one
-              sector (PWD, Senior Citizen, Single Parent).
-              Each proof card is colour-coded to match its category badge.
-            -->
-            {#if proofImages.length > 0}
-              <div class="px-6 py-4 space-y-4">
-                <!-- Section header -->
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
-                  </svg>
-                  Sector ID Proofs
-                </p>
+{#if proofImages.length > 0}
+  <div class="px-6 py-4 space-y-4">
+    <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
+      </svg>
+      Sector ID Proofs
+    </p>
 
-                {#each proofImages as proof (proof.label)}
-                  <div class="rounded-xl border {proofBorder[proof.color]} overflow-hidden">
-                    <!-- Proof card label row -->
-                    <div class="flex items-center gap-2 px-3 py-2 border-b {proofBorder[proof.color]}">
-                      <span class="text-base leading-none">{proof.icon}</span>
-                      <span class="text-[0.65rem] font-extrabold uppercase tracking-wider {proofLabel[proof.color]} px-2 py-0.5 rounded-full border">
-                        {proof.label}
-                      </span>
-                    </div>
+    {#each proofImages as proof (proof.label)}
+      <div class="rounded-xl border {proofBorder[proof.color]} overflow-hidden">
+        <div class="flex items-center gap-2 px-3 py-2 border-b {proofBorder[proof.color]}">
+          <span class="text-base leading-none">{proof.icon}</span>
+          <span class="text-[0.65rem] font-extrabold uppercase tracking-wider {proofLabel[proof.color]} px-2 py-0.5 rounded-full border">
+            {proof.label}
+          </span>
+        </div>
 
-                    <!-- Image or placeholder -->
-                    {#if proof.src}
-                      <button type="button"
-                        on:click={() => openLightbox(proof.src, `${proof.icon} ${proof.label}`)}
-                        class="w-full relative group cursor-zoom-in block">
-                        <img
-                          src={proof.src}
-                          alt={proof.label}
-                          class="w-full h-36 object-cover group-hover:brightness-90 transition-all"
-                        />
-                        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                          <span class="bg-black/50 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-sm">
-                            🔍 Tap to enlarge
-                          </span>
-                        </div>
-                      </button>
-                    {:else}
-                      <!-- Empty state: resident is in this sector but no proof uploaded -->
-                      <div class="w-full h-28 flex flex-col items-center justify-center gap-1.5 text-slate-300 bg-slate-50">
-                        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                        </svg>
-                        <p class="text-xs font-semibold text-slate-400">No proof submitted</p>
-                        <p class="text-[0.65rem] text-slate-300">Document was not uploaded</p>
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            {/if}
-            <!-- ══ END SECTOR ID PROOF IMAGES ═════════════════════════ -->
-
+        {#if proof.hasProof && proof.src}
+          <button type="button"
+            on:click={() => openLightbox(proof.src, `${proof.icon} ${proof.label}`)}
+            class="w-full relative group cursor-zoom-in block">
+            <img
+              src={proof.src}
+              alt={proof.label}
+              class="w-full h-36 object-cover group-hover:brightness-90 transition-all"
+            />
+            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+              <span class="bg-black/50 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-sm">
+                🔍 Tap to enlarge
+              </span>
+            </div>
+          </button>
+        {:else}
+          <!-- Show message when resident is in sector but no proof uploaded -->
+          <div class="w-full h-28 flex flex-col items-center justify-center gap-1.5 text-slate-300 bg-slate-50">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p class="text-xs font-semibold text-slate-400">No proof submitted</p>
+            <p class="text-[0.65rem] text-slate-300">Document was not uploaded</p>
+          </div>
+        {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
           </div>
         </div>
 
@@ -502,7 +675,6 @@
               <iframe src={mapSrc} title="Resident location"
                 class="w-full h-full border-0" loading="lazy"
                 referrerpolicy="no-referrer-when-downgrade"></iframe>
-              <!-- Name overlay -->
               <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 pointer-events-none whitespace-nowrap">
                 📍 {resident.firstName ?? resident.name?.split(' ')[0] ?? ''} {resident.lastName ?? ''}
               </div>
@@ -537,7 +709,6 @@
           <!-- Action buttons -->
           <div class="px-5 py-4 border-t border-slate-100 bg-white shrink-0 space-y-2">
 
-            <!-- Approve / Decline (pending only) -->
             {#if resident.status === 'pending'}
               <div class="flex gap-2">
                 <button type="button" on:click={() => openConfirm('approve')}
@@ -557,7 +728,6 @@
               </div>
             {/if}
 
-            <!-- Report · Print · Back -->
             <div class="flex gap-2">
               <button type="button"
                 class="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border-2 transition-all active:scale-95"
@@ -589,15 +759,8 @@
   </div>
 {/if}
 
-
 <!-- ══════════════════ PHOTO LIGHTBOX ═════════════════════════ -->
-<!--
-  Now shared between house photo AND all sector proof images.
-  lightboxSrc / lightboxLabel are set by openLightbox().
--->
 {#if showPhotoLightbox && lightboxSrc}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm"
     on:click={() => { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }}>
     <div class="relative max-w-lg w-full mx-4" on:click|stopPropagation>
@@ -618,7 +781,6 @@
     </div>
   </div>
 {/if}
-
 
 <!-- ══════════════════ CONFIRM MODAL ══════════════════════════ -->
 {#if confirmModal.open}
