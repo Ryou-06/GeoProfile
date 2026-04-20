@@ -4,7 +4,7 @@ const CACHE_NAME = 'geoprofile-v2';
 const PRECACHE = [
   '/',
   '/manifest.json',
-  '/icon-512.png',
+  '/GeoProfileLogo.png',
 ];
 
 self.addEventListener('install', (event) => {

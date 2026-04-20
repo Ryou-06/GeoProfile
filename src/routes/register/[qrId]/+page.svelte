@@ -7,25 +7,25 @@
   import { isInsidePagAsa } from '$lib/pagasaBoundary.js';
 
   // ── QR / Household ─────────────────────────────────────
-$: qrId = $page.params.qrId;
+  $: qrId = $page.params.qrId;
 
-interface Household {
-  id: string;
-  qrId: string;
-  houseNo: string;
-  notes?: string;
-  createdAt: unknown;
-  createdBy: string;
-  createdByName?: string;
-  status?: string;
-  street?: string;
-  zone?: string;
-  landmark?: string;
-}
+  interface Household {
+    id: string;
+    qrId: string;
+    houseNo: string;
+    notes?: string;
+    createdAt: unknown;
+    createdBy: string;
+    createdByName?: string;
+    status?: string;
+    street?: string;
+    zone?: string;
+    landmark?: string;
+  }
 
-let household: Household | null = null;
-let householdLoading = true;
-let householdError = '';
+  let household: Household | null = null;
+  let householdLoading = true;
+  let householdError = '';
 
   // ── GPS (Enhanced with Better Accuracy) ────────────────
   let gpsLat: number | null = null;
@@ -53,6 +53,7 @@ let householdError = '';
   let citizenship = 'Filipino';
   let occupation = '';
   let contactNo = '';
+  let email = '';
 
   // ── Address fields ─────────────────────────────────────
   let houseNo = '';
@@ -105,6 +106,7 @@ let householdError = '';
     citizenship: '',
     occupation: '',
     contactNo: '',
+    email: '',
     houseNo: '',
     street: '',
     pwdType: '',
@@ -126,6 +128,7 @@ let householdError = '';
     citizenship: false,
     occupation: false,
     contactNo: false,
+    email: false,
     houseNo: false,
     street: false,
     pwdType: false,
@@ -157,6 +160,7 @@ let householdError = '';
   $: if (touchedFields.citizenship) validateCitizenship();
   $: if (touchedFields.occupation) validateOccupation();
   $: if (touchedFields.contactNo) validateContactNo();
+  $: if (touchedFields.email) validateEmail();
   $: if (touchedFields.houseNo) validateHouseNo();
   $: if (touchedFields.street) validateStreet();
   $: if (touchedFields.pwdType && isPWD) validatePwdType();
@@ -349,6 +353,28 @@ let householdError = '';
     return true;
   }
 
+  function validateEmail(): boolean {
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    
+    if (!email.trim()) {
+      fieldErrors.email = 'Email address is required';
+      return false;
+    }
+    
+    if (!emailRegex.test(email.trim())) {
+      fieldErrors.email = 'Please enter a valid email address (e.g., name@example.com)';
+      return false;
+    }
+    
+    if (email.trim().length > 100) {
+      fieldErrors.email = 'Email address must be less than 100 characters';
+      return false;
+    }
+    
+    fieldErrors.email = '';
+    return true;
+  }
+
   function validateHouseNo(): boolean {
     if (!houseNo.trim()) {
       fieldErrors.houseNo = 'House/Unit number is required';
@@ -427,6 +453,7 @@ let householdError = '';
     const isCitizenshipValid = validateCitizenship();
     const isOccupationValid = validateOccupation();
     const isContactNoValid = validateContactNo();
+    const isEmailValid = validateEmail();
     const isHouseNoValid = validateHouseNo();
     const isStreetValid = validateStreet();
     
@@ -441,12 +468,13 @@ let householdError = '';
     touchedFields.occupation = true;
     touchedFields.houseNo = true;
     touchedFields.street = true;
+    touchedFields.email = true;
     if (contactNo.trim()) touchedFields.contactNo = true;
-    
+
     return isFirstNameValid && isLastNameValid && isMiddleNameValid &&
-           isBirthdateValid && isPlaceOfBirthValid && isSexValid && 
-           isCivilStatusValid && isCitizenshipValid && isOccupationValid && 
-           isContactNoValid && isHouseNoValid && isStreetValid;
+          isBirthdateValid && isPlaceOfBirthValid && isSexValid && 
+          isCivilStatusValid && isCitizenshipValid && isOccupationValid && 
+          isContactNoValid && isEmailValid && isHouseNoValid && isStreetValid;
   }
 
   function validateStep2(): boolean {
@@ -482,6 +510,7 @@ let householdError = '';
       { condition: fieldErrors.citizenship, id: 'citizenshipInput' },
       { condition: fieldErrors.occupation, id: 'occupationInput' },
       { condition: fieldErrors.contactNo, id: 'contactNoInput' },
+      { condition: fieldErrors.email, id: 'emailInput' },
       { condition: fieldErrors.houseNo, id: 'houseNoInput' },
       { condition: fieldErrors.street, id: 'streetSelect' },
       { condition: fieldErrors.pwdType, id: 'pwdTypeSelect' },
@@ -527,7 +556,7 @@ let householdError = '';
     });
   }
 
-  // ── ID file handlers (no size limit beyond 10MB, no compression) ──
+  // ── ID file handlers ────────────────────────────────
   function handlePwdIdChange(e: Event) {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
@@ -541,11 +570,11 @@ let householdError = '';
     processPwdFile(file);
   }
 
-function processPwdFile(file: File) {
-  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
-    fieldErrors.pwdIdFile = 'File must be less than 15MB';
-    return;
-  }
+  function processPwdFile(file: File) {
+    if (file.size > 15 * 1024 * 1024) {
+      fieldErrors.pwdIdFile = 'File must be less than 15MB';
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       fieldErrors.pwdIdFile = 'Please select an image file';
       return;
@@ -570,11 +599,11 @@ function processPwdFile(file: File) {
     processSeniorFile(file);
   }
 
-function processSeniorFile(file: File) {
-  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
-    fieldErrors.seniorIdFile = 'File must be less than 15MB';
-    return;
-  }
+  function processSeniorFile(file: File) {
+    if (file.size > 15 * 1024 * 1024) {
+      fieldErrors.seniorIdFile = 'File must be less than 15MB';
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       fieldErrors.seniorIdFile = 'Please select an image file';
       return;
@@ -599,11 +628,11 @@ function processSeniorFile(file: File) {
     processSingleParentFile(file);
   }
 
-function processSingleParentFile(file: File) {
-  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
-    fieldErrors.singleParentIdFile = 'File must be less than 15MB';
-    return;
-  }
+  function processSingleParentFile(file: File) {
+    if (file.size > 15 * 1024 * 1024) {
+      fieldErrors.singleParentIdFile = 'File must be less than 15MB';
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       fieldErrors.singleParentIdFile = 'Please select an image file';
       return;
@@ -693,12 +722,10 @@ function processSingleParentFile(file: File) {
 
         gpsAttempt++;
 
-        // ── Check boundary once we have a good enough reading ──
         const shouldFinalize = newAccuracy <= 15 || (newAccuracy <= 30 && gpsAttempt >= 2) || gpsAttempt >= maxGpsRetries;
 
         if (shouldFinalize) {
           stopGPS();
-          // ── BOUNDARY CHECK ──────────────────────────────────
           if (!isInsidePagAsa(newLat, newLng)) {
             gpsStatus = 'outside';
             gpsMessage = '❌ You are outside Barangay Pag-Asa.';
@@ -793,15 +820,15 @@ function processSingleParentFile(file: File) {
     return () => { stopGPS(); };
   });
 
-  // ── House photo handler (15MB limit) ──────────────────
-function handlePhotoChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  if (file.size > 15 * 1024 * 1024) {
-    fieldErrors.housePhoto = 'Photo must be less than 15MB';
-    return;
-  }
+  // ── House photo handler ──────────────────────────────────
+  function handlePhotoChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      fieldErrors.housePhoto = 'Photo must be less than 15MB';
+      return;
+    }
     if (!file.type.startsWith('image/')) {
       fieldErrors.housePhoto = 'Please select an image file';
       return;
@@ -837,38 +864,37 @@ function handlePhotoChange(e: Event) {
   }
 
   // ── Step navigation with validation ────────────────────
-function nextStep() {
-  errorMsg = '';
-  
-  // Add boundary check before proceeding from step 1
-  if (step === 1) {
-    if (gpsStatus === 'outside') {
-      errorMsg = '❌ You must be inside Barangay Pag-Asa to register.';
-      scrollToFirstError();
-      return;
-    }
+  function nextStep() {
+    errorMsg = '';
     
-    if (gpsLat === null || gpsLng === null) {
-      errorMsg = '❌ Please wait for GPS to lock your location before proceeding.';
-      scrollToFirstError();
-      return;
+    if (step === 1) {
+      if (gpsStatus === 'outside') {
+        errorMsg = '❌ You must be inside Barangay Pag-Asa to register.';
+        scrollToFirstError();
+        return;
+      }
+      
+      if (gpsLat === null || gpsLng === null) {
+        errorMsg = '❌ Please wait for GPS to lock your location before proceeding.';
+        scrollToFirstError();
+        return;
+      }
+      
+      if (!validateStep1()) {
+        errorMsg = 'Please fill in all required fields correctly';
+        scrollToFirstError();
+        return;
+      }
+      step++;
+    } else if (step === 2) {
+      if (!validateStep2()) {
+        errorMsg = 'Please complete all required fields';
+        scrollToFirstError();
+        return;
+      }
+      step++;
     }
-    
-    if (!validateStep1()) {
-      errorMsg = 'Please fill in all required fields correctly';
-      scrollToFirstError();
-      return;
-    }
-    step++;
-  } else if (step === 2) {
-    if (!validateStep2()) {
-      errorMsg = 'Please complete all required fields';
-      scrollToFirstError();
-      return;
-    }
-    step++;
   }
-}
 
   function prevStep() {
     errorMsg = '';
@@ -906,7 +932,6 @@ function nextStep() {
       const { db } = await import('$lib/firebase');
       const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
 
-      // Compress only the house photo; read ID proofs as raw base64
       const housePhotoUrl = housePhoto ? await compressImage(housePhoto) : null;
       const pwdIdUrl      = pwdIdFile        ? await readFileAsBase64(pwdIdFile)        : null;
       const seniorIdUrl   = seniorIdFile     ? await readFileAsBase64(seniorIdFile)     : null;
@@ -920,6 +945,7 @@ function nextStep() {
         middleName: middleName.trim(),
         extensionName: extensionName,
         name: fullName,
+        email: email.trim().toLowerCase(),
         birthdate,
         placeOfBirth: placeOfBirth.trim(),
         age: age ?? 0,
@@ -1094,6 +1120,7 @@ function nextStep() {
       <div class="w-full max-w-xs bg-slate-100 rounded-2xl p-4 text-left space-y-2">
         <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2">Submitted Info</p>
         <p class="text-sm font-bold text-slate-700">{fullName}</p>
+        <p class="text-xs text-slate-500">{email}</p>
         <p class="text-xs text-slate-500">{placeOfBirth ? `Born in ${placeOfBirth}` : ''}</p>
         <p class="text-xs text-slate-500">{fullAddress}</p>
         {#if occupation}<p class="text-xs text-slate-500">Occupation: {occupation}</p>{/if}
@@ -1127,7 +1154,7 @@ function nextStep() {
         <div class="min-w-0">
           <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Household</p>
           <p class="font-bold text-slate-700 text-sm truncate">{household?.houseNo} {household?.street}</p>
-          <p class="text-xs text-slate-500">{household?.zone ?? ''}{household?.zone ? ', ' : ''}Brgy. Pag-Asa · {qrId}</p>
+          <p class="text-xs text-slate-500">Brgy. Pag-Asa · {qrId}</p>
         </div>
       </div>
 
@@ -1213,22 +1240,6 @@ function nextStep() {
           </div>
         {/each}
       </div>
-      <!-- Add this right after the GPS Status Banner -->
-{#if gpsStatus === 'outside'}
-  <div class="flex items-start gap-2.5 bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3">
-    <svg class="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-    </svg>
-    <div class="flex-1">
-      <p class="text-sm font-bold text-red-700">⛔ Outside Barangay Pag-Asa</p>
-      <p class="text-xs text-red-600 mt-1">Registration is only allowed for residents physically inside Barangay Pag-Asa, Olongapo City.</p>
-      <button type="button" on:click={retryGPS}
-        class="text-xs font-bold text-red-700 underline hover:text-red-800 mt-2">
-        🔄 Retry GPS Location
-      </button>
-    </div>
-  </div>
-{/if}
 
       <!-- Error banner -->
       {#if errorMsg}
@@ -1419,6 +1430,22 @@ function nextStep() {
             </div>
           </div>
 
+          <!-- Email Address -->
+          <div>
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Email Address <span class="text-red-400">*</span></label>
+            <input id="emailInput" type="email" bind:value={email}
+              on:blur={() => { touchedFields.email = true; validateEmail(); }}
+              placeholder="resident@example.com"
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.email ? 'error-border' : (touchedFields.email && email && !fieldErrors.email ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.email}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.email}</p>
+            {:else if touchedFields.email && email && !fieldErrors.email}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
+            <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">We'll send updates and notifications to this email</p>
+          </div>
+
           <!-- Occupation -->
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Profession / Occupation <span class="text-red-400">*</span></label>
@@ -1435,90 +1462,90 @@ function nextStep() {
           </div>
         </div>
 
-        <!-- Address section -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <h3 class="font-nunito font-extrabold text-slate-700">Address</h3>
+<!-- Address section -->
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+  <h3 class="font-nunito font-extrabold text-slate-700">Address</h3>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Region</label>
-            <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
-              Region III — Central Luzon
-            </div>
-          </div>
+  <div>
+    <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Region</label>
+    <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
+      Region III — Central Luzon
+    </div>
+  </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Province</label>
-              <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
-                Zambales
-              </div>
-            </div>
-            <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">City</label>
-              <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
-                Olongapo City
-              </div>
-            </div>
-          </div>
+  <div class="grid grid-cols-2 gap-3">
+    <div>
+      <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Province</label>
+      <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
+        Zambales
+      </div>
+    </div>
+    <div>
+      <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">City</label>
+      <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
+        Olongapo City
+      </div>
+    </div>
+  </div>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Barangay</label>
-            <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
-              Barangay Pag-Asa
-            </div>
-          </div>
+  <div>
+    <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Barangay</label>
+    <div class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-100 text-slate-500 text-sm cursor-not-allowed select-none">
+      Barangay Pag-Asa
+    </div>
+  </div>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Street <span class="text-red-400">*</span></label>
-            <div class="relative">
-              <select id="streetSelect" bind:value={street}
-                on:change={() => { touchedFields.street = true; validateStreet(); }}
-                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                       {street === '' ? 'text-slate-300' : 'text-slate-700'}
-                       {fieldErrors.street ? 'error-border' : (touchedFields.street && street ? 'valid-border' : 'border-slate-200')}">
-                <option value="">Select street</option>
-                {#each streets as s (s)}
-                  <option value={s}>{s}</option>
-                {/each}
-              </select>
-              <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-              </svg>
-            </div>
-            {#if fieldErrors.street}
-              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.street}</p>
-            {/if}
-          </div>
+  <div>
+    <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Street <span class="text-red-400">*</span></label>
+    <div class="relative">
+      <select id="streetSelect" bind:value={street}
+        on:change={() => { touchedFields.street = true; validateStreet(); }}
+        class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
+              {street === '' ? 'text-slate-300' : 'text-slate-700'}
+              {fieldErrors.street ? 'error-border' : (touchedFields.street && street ? 'valid-border' : 'border-slate-200')}">
+        <option value="">Select street</option>
+        {#each streets as s (s)}
+          <option value={s}>{s}</option>
+        {/each}
+      </select>
+      <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </div>
+    {#if fieldErrors.street}
+      <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.street}</p>
+    {/if}
+  </div>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">House No. / Unit / Block <span class="text-red-400">*</span></label>
-            <input id="houseNoInput" type="text" bind:value={houseNo} 
-              on:blur={() => { touchedFields.houseNo = true; validateHouseNo(); }}
-              placeholder="e.g. 47 or Unit 3B or Blk 2 Lot 5"
-              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
-              {fieldErrors.houseNo ? 'error-border' : (touchedFields.houseNo && houseNo && !fieldErrors.houseNo ? 'valid-border' : 'border-slate-200')}" />
-            {#if fieldErrors.houseNo}
-              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.houseNo}</p>
-            {:else if touchedFields.houseNo && houseNo && !fieldErrors.houseNo}
-              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
-            {/if}
-            <div class="flex flex-wrap gap-1.5 mt-2">
-              {#each ['47', 'Unit 3B', 'Blk 2 Lot 5', 'Room 1'] as ex (ex)}
-                <button type="button" on:click={() => houseNo = ex}
-                  class="text-[0.65rem] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
-                  {ex}
-                </button>
-              {/each}
-            </div>
-          </div>
+  <div>
+    <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">House No. / Unit / Block <span class="text-red-400">*</span></label>
+    <input id="houseNoInput" type="text" bind:value={houseNo} 
+      on:blur={() => { touchedFields.houseNo = true; validateHouseNo(); }}
+      placeholder="e.g. 47 or Unit 3B or Blk 2 Lot 5"
+      class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+      {fieldErrors.houseNo ? 'error-border' : (touchedFields.houseNo && houseNo && !fieldErrors.houseNo ? 'valid-border' : 'border-slate-200')}" />
+    {#if fieldErrors.houseNo}
+      <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.houseNo}</p>
+    {:else if touchedFields.houseNo && houseNo && !fieldErrors.houseNo}
+      <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+    {/if}
+    <div class="flex flex-wrap gap-1.5 mt-2">
+      {#each ['47', 'Unit 3B', 'Blk 2 Lot 5', 'Room 1'] as ex (ex)}
+        <button type="button" on:click={() => houseNo = ex}
+          class="text-[0.65rem] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white text-slate-400 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
+          {ex}
+        </button>
+      {/each}
+    </div>
+  </div>
 
-          <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
-            <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-400 mb-1">Full Address Preview</p>
-            <p class="text-xs text-blue-700 font-semibold leading-relaxed">
-              {fullAddress || 'Barangay Pag-Asa, Olongapo City, Zambales'}
-            </p>
-          </div>
-        </div>
+  <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
+    <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-400 mb-1">Full Address Preview</p>
+    <p class="text-xs text-blue-700 font-semibold leading-relaxed">
+      {fullAddress || 'Barangay Pag-Asa, Olongapo City, Zambales'}
+    </p>
+  </div>
+</div>
 
       <!-- ══ STEP 2: Categories ══ -->
       {:else if step === 2}
@@ -1782,6 +1809,7 @@ function nextStep() {
           <div class="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-2">Review Your Info</p>
             <p class="text-sm font-bold text-slate-700">{fullName}</p>
+            <p class="text-xs text-slate-500">{email}</p>
             <p class="text-xs text-slate-500">{sex} · {age} yrs old · {civilStatus}</p>
             {#if placeOfBirth}<p class="text-xs text-slate-500">Born in: {placeOfBirth}</p>{/if}
             {#if citizenship && citizenship !== 'Filipino'}<p class="text-xs text-slate-500">Citizenship: {citizenship}</p>{/if}
@@ -1824,13 +1852,13 @@ function nextStep() {
           </button>
         {/if}
 
-{#if step < 3}
-  <button type="button" on:click={nextStep}
-    disabled={step === 1 && (gpsStatus === 'outside' || gpsLat === null)}
-    class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-    style="background: #0f2060;">
-    Next →
-  </button>
+        {#if step < 3}
+          <button type="button" on:click={nextStep}
+            disabled={step === 1 && (gpsStatus === 'outside' || gpsLat === null)}
+            class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            style="background: #0f2060;">
+            Next →
+          </button>
         {:else}
           <button type="button" on:click={handleSubmit} disabled={loading}
             class="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"

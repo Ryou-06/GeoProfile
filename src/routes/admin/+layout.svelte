@@ -66,11 +66,14 @@
            {mobileOpen ? 'translate-x-0' : '-translate-x-full'}"
     style="background: linear-gradient(180deg, #0f2060 0%, #1a3a80 100%);"
   >
-    <!-- Brand -->
+    <!-- Brand with Logo -->
     <div class="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-      <div class="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-base shadow">
-        📍
-      </div>
+      <!-- Real Logo Image -->
+      <img 
+        src="/GeoProfileLogo.png" 
+        alt="GeoProfile Logo" 
+        class="w-8 h-8 object-contain rounded-xl"
+      />
       <span class="font-nunito font-black text-white text-lg tracking-tight">
         <span class="font-light opacity-75">Geo</span>Profile
       </span>
@@ -113,7 +116,7 @@
                text-white/60 hover:bg-red-500/20 hover:text-red-300 transition-all duration-150"
       >
         <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 012-2h4a3 3 0 013 3v1" />
         </svg>
         Logout
       </button>
@@ -135,6 +138,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
+      <!-- Mobile logo -->
+      <img 
+        src="/GeoProfileLogo.png" 
+        alt="GeoProfile Logo" 
+        class="w-6 h-6 object-contain"
+      />
       <span class="font-nunito font-black text-slate-700 text-lg">
         <span class="font-light text-slate-400">Geo</span>Profile
       </span>

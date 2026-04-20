@@ -559,32 +559,66 @@ L.geoJSON(pagAsaBoundary, {
 
       <div bind:this={mapContainer} class="absolute inset-0 z-0"></div>
 
-      <!-- Legend -->
-      <div class="absolute bottom-4 left-4 z-10 bg-white rounded-xl shadow-md border border-slate-100 px-4 py-3">
-        <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Map Legend</p>
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2">
-            <svg class="w-4 h-5 shrink-0" viewBox="0 0 44 58">
-              <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z" fill="#2563eb"/>
-              <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
-              <text x="22" y="22" text-anchor="middle" fill="#2563eb" font-size="9" font-weight="800" font-family="Arial">48</text>
-            </svg>
-            <span class="text-xs font-semibold text-slate-600">House number on pin</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center">
-              <span class="text-white text-[0.5rem] font-bold">3</span>
-            </div>
-            <span class="text-xs font-semibold text-slate-600">Badge = resident count</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-4 h-5 flex items-center justify-center">
-              <div class="w-3.5 h-3.5 rounded-full bg-blue-700 ring-2 ring-white ring-offset-1"></div>
-            </div>
-            <span class="text-xs font-semibold text-slate-600">Darker = selected</span>
-          </div>
+<!-- Legend - Hidden by default, shows on hover -->
+<div class="absolute bottom-4 left-4 z-10 group">
+  <!-- Small icon when collapsed -->
+  <div class="bg-white rounded-full shadow-md border border-slate-200 p-2 cursor-pointer group-hover:opacity-0 transition-opacity duration-200">
+    <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l5 5a2 2 0 01.586 1.414V19a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"/>
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 7h5"/>
+    </svg>
+  </div>
+  
+  <!-- Full legend - shows on hover -->
+  <div class="absolute bottom-0 left-0 bg-white rounded-xl shadow-md border border-slate-100 px-4 py-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 min-w-[180px]">
+    <p class="text-[0.6rem] font-extrabold tracking-widest text-slate-400 uppercase mb-2">Map Legend</p>
+    <div class="space-y-1.5">
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-7 shrink-0 flex items-center justify-center">
+          <svg viewBox="0 0 44 58" class="w-4 h-5">
+            <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z" fill="#2563eb"/>
+            <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
+            <text x="22" y="22" text-anchor="middle" dominant-baseline="central" fill="#2563eb" font-size="9" font-weight="800" font-family="Arial">47</text>
+          </svg>
+        </div>
+        <span class="text-xs font-semibold text-slate-600">House no. on pin</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+          <span class="text-white text-[0.5rem] font-bold">3</span>
+        </div>
+        <span class="text-xs font-semibold text-slate-600">Resident count</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-6 h-7 shrink-0 flex items-center justify-center">
+          <svg viewBox="0 0 44 58" class="w-4 h-5">
+            <path d="M22 2C13.163 2 6 9.163 6 18c0 11.25 16 36 16 36s16-24.75 16-36C38 9.163 30.837 2 22 2z" fill="#1d4ed8" stroke="white" stroke-width="2"/>
+            <circle cx="22" cy="18" r="11" fill="white" opacity="0.95"/>
+          </svg>
+        </div>
+        <span class="text-xs font-semibold text-slate-600">Selected</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-4 h-4 rounded-full bg-amber-400 shrink-0"></div>
+        <span class="text-xs font-semibold text-slate-600">PWD Household</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-4 h-4 rounded-full bg-emerald-500 shrink-0"></div>
+        <span class="text-xs font-semibold text-slate-600">Senior Household</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="w-4 h-4 rounded-full bg-violet-500 shrink-0"></div>
+        <span class="text-xs font-semibold text-slate-600">Single Parent</span>
+      </div>
+      <div class="border-t border-slate-100 pt-1.5 mt-1">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 border-2 border-blue-500 bg-blue-50 shrink-0 rounded"></div>
+          <span class="text-xs font-semibold text-slate-600">Pag-Asa Boundary</span>
         </div>
       </div>
+    </div>
+  </div>
+</div>
 
       <!-- Count badge -->
       <div class="absolute top-3 right-3 z-10 bg-white rounded-lg shadow-sm border border-slate-100 px-3 py-1.5 flex items-center gap-1.5">

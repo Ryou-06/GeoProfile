@@ -26,11 +26,6 @@
       href: '/staff/mapView',
       icon: 'M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7'
     }
-    // {
-    //   label: 'Residents',
-    //   href: '/staff/residents',
-    //   icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'
-    // }
   ];
 
   /** @param {string} href */
@@ -71,11 +66,13 @@
            {mobileOpen ? 'translate-x-0' : '-translate-x-full'}"
     style="background: linear-gradient(180deg, #064e3b 0%, #065f46 100%);"
   >
-    <!-- Brand -->
+    <!-- Brand with Logo -->
     <div class="flex items-center gap-2.5 px-5 py-5 border-b border-white/10">
-      <div class="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-base shadow">
-        📍
-      </div>
+      <img 
+        src="/GeoProfileLogo.png" 
+        alt="GeoProfile Logo" 
+        class="w-8 h-8 object-contain rounded-xl"
+      />
       <span class="font-nunito font-black text-white text-lg tracking-tight">
         <span class="font-light opacity-75">Geo</span>Profile
       </span>
@@ -140,6 +137,12 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
+      <!-- Mobile logo -->
+      <img 
+        src="/GeoProfileLogo.png" 
+        alt="GeoProfile Logo" 
+        class="w-6 h-6 object-contain"
+      />
       <span class="font-nunito font-black text-slate-700 text-lg">
         <span class="font-light text-slate-400">Geo</span>Profile
       </span>
