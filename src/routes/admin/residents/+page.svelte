@@ -46,7 +46,6 @@
   let searchQuery  = '';
   let filterStreet = 'All Streets';
   let filterStatus = 'All Status';
-  let filterSector = 'All Sectors';
 
   let selected  = new SvelteSet<string>();
   let selectAll = false;
@@ -56,7 +55,6 @@
 
   const streets  = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
   const statuses = ['All Status',  'Pending', 'Approved', 'Declined'];
-  const sectors  = ['All Sectors', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -103,8 +101,7 @@
       || r.address?.toLowerCase().includes(q);
     const matchStreet = filterStreet === 'All Streets' || r.street === filterStreet;
     const matchStatus = filterStatus === 'All Status'  || r.status === filterStatus.toLowerCase();
-    const matchSector = filterSector === 'All Sectors' || r.sector === filterSector;
-    return matchSearch && matchStreet && matchStatus && matchSector;
+    return matchSearch && matchStreet && matchStatus;
   });
 
   function toggleSelectAll() {
@@ -172,10 +169,6 @@
     <select bind:value={filterStatus}
       class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
       {#each statuses as s (s)}<option>{s}</option>{/each}
-    </select>
-    <select bind:value={filterSector}
-      class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
-      {#each sectors as s (s)}<option>{s}</option>{/each}
     </select>
     <button type="button"
       class="ml-auto flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2.5 rounded-xl transition-all active:scale-95 shadow-sm"

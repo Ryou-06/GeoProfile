@@ -97,11 +97,18 @@ let householdError = '';
   let fieldErrors = {
     firstName: '',
     lastName: '',
+    middleName: '',
+    extensionName: '',
     birthdate: '',
+    placeOfBirth: '',
     sex: '',
     civilStatus: '',
+    citizenship: '',
+    occupation: '',
     contactNo: '',
+    houseNo: '',
     street: '',
+    purok: '',
     pwdType: '',
     pwdIdFile: '',
     seniorIdFile: '',
@@ -112,11 +119,18 @@ let householdError = '';
   let touchedFields = {
     firstName: false,
     lastName: false,
+    middleName: false,
+    extensionName: false,
     birthdate: false,
+    placeOfBirth: false,
     sex: false,
     civilStatus: false,
+    citizenship: false,
+    occupation: false,
     contactNo: false,
+    houseNo: false,
     street: false,
+    purok: false,
     pwdType: false,
     pwdIdFile: false,
     seniorIdFile: false,
@@ -138,11 +152,17 @@ let householdError = '';
   // Real-time validation triggers
   $: if (touchedFields.firstName) validateFirstName();
   $: if (touchedFields.lastName) validateLastName();
+  $: if (touchedFields.middleName) validateMiddleName();
   $: if (touchedFields.birthdate) validateBirthdate();
+  $: if (touchedFields.placeOfBirth) validatePlaceOfBirth();
   $: if (touchedFields.sex) validateSex();
   $: if (touchedFields.civilStatus) validateCivilStatus();
+  $: if (touchedFields.citizenship) validateCitizenship();
+  $: if (touchedFields.occupation) validateOccupation();
   $: if (touchedFields.contactNo) validateContactNo();
+  $: if (touchedFields.houseNo) validateHouseNo();
   $: if (touchedFields.street) validateStreet();
+  $: if (touchedFields.purok) validatePurok();
   $: if (touchedFields.pwdType && isPWD) validatePwdType();
   $: if (touchedFields.pwdIdFile && isPWD) validatePwdIdFile();
   $: if (touchedFields.seniorIdFile && isSenior) validateSeniorIdFile();
@@ -208,6 +228,20 @@ let householdError = '';
     return true;
   }
 
+  function validateMiddleName(): boolean {
+    if (middleName.trim() && !/^[a-zA-Z\s\-ñÑ]*$/.test(middleName.trim())) {
+      fieldErrors.middleName = 'Middle name should only contain letters';
+      return false;
+    }
+    fieldErrors.middleName = '';
+    return true;
+  }
+
+  function validateExtensionName(): boolean {
+    fieldErrors.extensionName = '';
+    return true;
+  }
+
   function validateBirthdate(): boolean {
     if (!birthdate) {
       fieldErrors.birthdate = 'Birthdate is required';
@@ -249,6 +283,23 @@ let householdError = '';
     return true;
   }
 
+  function validatePlaceOfBirth(): boolean {
+    if (!placeOfBirth.trim()) {
+      fieldErrors.placeOfBirth = 'Place of birth is required';
+      return false;
+    }
+    if (placeOfBirth.trim().length < 3) {
+      fieldErrors.placeOfBirth = 'Place of birth must be at least 3 characters';
+      return false;
+    }
+    if (!/^[a-zA-Z\s\-ñÑ,\.]+$/.test(placeOfBirth.trim())) {
+      fieldErrors.placeOfBirth = 'Place of birth should only contain letters, commas, and periods';
+      return false;
+    }
+    fieldErrors.placeOfBirth = '';
+    return true;
+  }
+
   function validateSex(): boolean {
     if (!sex) {
       fieldErrors.sex = 'Please select your sex';
@@ -267,6 +318,40 @@ let householdError = '';
     return true;
   }
 
+  function validateCitizenship(): boolean {
+    if (!citizenship.trim()) {
+      fieldErrors.citizenship = 'Citizenship is required';
+      return false;
+    }
+    if (citizenship.trim().length < 2) {
+      fieldErrors.citizenship = 'Citizenship must be at least 2 characters';
+      return false;
+    }
+    if (!/^[a-zA-Z\s\-]+$/.test(citizenship.trim())) {
+      fieldErrors.citizenship = 'Citizenship should only contain letters';
+      return false;
+    }
+    fieldErrors.citizenship = '';
+    return true;
+  }
+
+  function validateOccupation(): boolean {
+    if (!occupation.trim()) {
+      fieldErrors.occupation = 'Occupation is required';
+      return false;
+    }
+    if (occupation.trim().length < 2) {
+      fieldErrors.occupation = 'Occupation must be at least 2 characters';
+      return false;
+    }
+    if (!/^[a-zA-Z0-9\s\-\.\&\'\/]+$/.test(occupation.trim())) {
+      fieldErrors.occupation = 'Occupation contains invalid characters';
+      return false;
+    }
+    fieldErrors.occupation = '';
+    return true;
+  }
+
   function validateContactNo(): boolean {
     const cleaned = contactNo.trim().replace(/\s/g, '');
     if (cleaned && !/^09\d{9}$/.test(cleaned)) {
@@ -281,12 +366,42 @@ let householdError = '';
     return true;
   }
 
+  function validateHouseNo(): boolean {
+    if (!houseNo.trim()) {
+      fieldErrors.houseNo = 'House/Unit number is required';
+      return false;
+    }
+    if (houseNo.trim().length < 1) {
+      fieldErrors.houseNo = 'Please enter a valid house/unit number';
+      return false;
+    }
+    if (!/^[a-zA-Z0-9\s\-\#\.\/]+$/.test(houseNo.trim())) {
+      fieldErrors.houseNo = 'House number contains invalid characters';
+      return false;
+    }
+    fieldErrors.houseNo = '';
+    return true;
+  }
+
   function validateStreet(): boolean {
     if (!street) {
       fieldErrors.street = 'Please select a street';
       return false;
     }
     fieldErrors.street = '';
+    return true;
+  }
+
+  function validatePurok(): boolean {
+    if (!purok.trim()) {
+      fieldErrors.purok = 'Zone/Purok is required';
+      return false;
+    }
+    if (purok.trim().length < 1) {
+      fieldErrors.purok = 'Please enter a valid zone/purok';
+      return false;
+    }
+    fieldErrors.purok = '';
     return true;
   }
 
@@ -338,22 +453,36 @@ let householdError = '';
   function validateStep1(): boolean {
     const isFirstNameValid = validateFirstName();
     const isLastNameValid = validateLastName();
+    const isMiddleNameValid = validateMiddleName();
     const isBirthdateValid = validateBirthdate();
+    const isPlaceOfBirthValid = validatePlaceOfBirth();
     const isSexValid = validateSex();
     const isCivilStatusValid = validateCivilStatus();
+    const isCitizenshipValid = validateCitizenship();
+    const isOccupationValid = validateOccupation();
     const isContactNoValid = validateContactNo();
+    const isHouseNoValid = validateHouseNo();
     const isStreetValid = validateStreet();
+    const isPurokValid = validatePurok();
     
     touchedFields.firstName = true;
     touchedFields.lastName = true;
+    touchedFields.middleName = true;
     touchedFields.birthdate = true;
+    touchedFields.placeOfBirth = true;
     touchedFields.sex = true;
     touchedFields.civilStatus = true;
+    touchedFields.citizenship = true;
+    touchedFields.occupation = true;
+    touchedFields.houseNo = true;
     touchedFields.street = true;
+    touchedFields.purok = true;
     if (contactNo.trim()) touchedFields.contactNo = true;
     
-    return isFirstNameValid && isLastNameValid && isBirthdateValid &&
-           isSexValid && isCivilStatusValid && isContactNoValid && isStreetValid;
+    return isFirstNameValid && isLastNameValid && isMiddleNameValid &&
+           isBirthdateValid && isPlaceOfBirthValid && isSexValid && 
+           isCivilStatusValid && isCitizenshipValid && isOccupationValid && 
+           isContactNoValid && isHouseNoValid && isStreetValid && isPurokValid;
   }
 
   function validateStep2(): boolean {
@@ -381,11 +510,17 @@ let householdError = '';
     const errorSelectors = [
       { condition: fieldErrors.firstName, id: 'firstNameInput' },
       { condition: fieldErrors.lastName, id: 'lastNameInput' },
+      { condition: fieldErrors.middleName, id: 'middleNameInput' },
       { condition: fieldErrors.birthdate, id: 'birthdateInput' },
+      { condition: fieldErrors.placeOfBirth, id: 'placeOfBirthInput' },
       { condition: fieldErrors.sex, id: 'sexSelect' },
       { condition: fieldErrors.civilStatus, id: 'civilStatusSelect' },
+      { condition: fieldErrors.citizenship, id: 'citizenshipInput' },
+      { condition: fieldErrors.occupation, id: 'occupationInput' },
       { condition: fieldErrors.contactNo, id: 'contactNoInput' },
+      { condition: fieldErrors.houseNo, id: 'houseNoInput' },
       { condition: fieldErrors.street, id: 'streetSelect' },
+      { condition: fieldErrors.purok, id: 'purokInput' },
       { condition: fieldErrors.pwdType, id: 'pwdTypeSelect' },
       { condition: fieldErrors.pwdIdFile, id: 'pwdIdUpload' },
       { condition: fieldErrors.seniorIdFile, id: 'seniorIdUpload' },
@@ -824,7 +959,6 @@ async function compressImage(file: File): Promise<string | null> {
   }
 
 // ── Submit ────────────────────────────────────────────
-// ── Submit ────────────────────────────────────────────
 async function handleSubmit() {
   errorMsg = '';
   
@@ -1234,8 +1368,16 @@ async function handleSubmit() {
             </div>
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Middle Name</label>
-              <input id="middleNameInput" type="text" bind:value={middleName} placeholder="Santos (optional)"
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+              <input id="middleNameInput" type="text" bind:value={middleName} 
+                on:blur={() => { touchedFields.middleName = true; validateMiddleName(); }}
+                placeholder="Santos"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.middleName ? 'error-border' : (touchedFields.middleName && middleName && !fieldErrors.middleName ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.middleName}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.middleName}</p>
+              {:else if touchedFields.middleName && middleName && !fieldErrors.middleName}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
             </div>
           </div>
 
@@ -1254,11 +1396,17 @@ async function handleSubmit() {
               {/if}
             </div>
             <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Place of Birth</label>
-              <input type="text" bind:value={placeOfBirth}
-                placeholder="e.g. Olongapo City"
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
-              <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">City/Municipality, Province</p>
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Place of Birth <span class="text-red-400">*</span></label>
+              <input id="placeOfBirthInput" type="text" bind:value={placeOfBirth}
+                on:blur={() => { touchedFields.placeOfBirth = true; validatePlaceOfBirth(); }}
+                placeholder="e.g. Olongapo City, Zambales"
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.placeOfBirth ? 'error-border' : (touchedFields.placeOfBirth && placeOfBirth && !fieldErrors.placeOfBirth ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.placeOfBirth}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.placeOfBirth}</p>
+              {:else if touchedFields.placeOfBirth && placeOfBirth && !fieldErrors.placeOfBirth}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
             </div>
           </div>
 
@@ -1317,10 +1465,17 @@ async function handleSubmit() {
           <!-- Citizenship + Contact Number -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Citizenship</label>
-              <input type="text" bind:value={citizenship}
+              <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Citizenship <span class="text-red-400">*</span></label>
+              <input id="citizenshipInput" type="text" bind:value={citizenship}
+                on:blur={() => { touchedFields.citizenship = true; validateCitizenship(); }}
                 placeholder="Filipino"
-                class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+                class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+                {fieldErrors.citizenship ? 'error-border' : (touchedFields.citizenship && citizenship && !fieldErrors.citizenship ? 'valid-border' : 'border-slate-200')}" />
+              {#if fieldErrors.citizenship}
+                <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.citizenship}</p>
+              {:else if touchedFields.citizenship && citizenship && !fieldErrors.citizenship}
+                <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+              {/if}
             </div>
             <div>
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Contact Number</label>
@@ -1340,11 +1495,18 @@ async function handleSubmit() {
 
           <!-- Occupation -->
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Profession / Occupation</label>
-            <input type="text" bind:value={occupation}
-              placeholder="e.g. Government Employee, Student, Nurse, N/A"
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
-            <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">Write N/A if not currently employed</p>
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Profession / Occupation <span class="text-red-400">*</span></label>
+            <input id="occupationInput" type="text" bind:value={occupation}
+              on:blur={() => { touchedFields.occupation = true; validateOccupation(); }}
+              placeholder="e.g. Government Employee, Student, Nurse"
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.occupation ? 'error-border' : (touchedFields.occupation && occupation && !fieldErrors.occupation ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.occupation}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.occupation}</p>
+            {:else if touchedFields.occupation && occupation && !fieldErrors.occupation}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
+            <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">Enter your current profession or "Student" if studying</p>
           </div>
         </div>
 
@@ -1406,9 +1568,17 @@ async function handleSubmit() {
           </div>
 
           <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">House No. / Unit / Block</label>
-            <input type="text" bind:value={houseNo} placeholder="e.g. 47 or Unit 3B or Blk 2 Lot 5"
-              class="w-full px-3 py-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all" />
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">House No. / Unit / Block <span class="text-red-400">*</span></label>
+            <input id="houseNoInput" type="text" bind:value={houseNo} 
+              on:blur={() => { touchedFields.houseNo = true; validateHouseNo(); }}
+              placeholder="e.g. 47 or Unit 3B or Blk 2 Lot 5"
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.houseNo ? 'error-border' : (touchedFields.houseNo && houseNo && !fieldErrors.houseNo ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.houseNo}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.houseNo}</p>
+            {:else if touchedFields.houseNo && houseNo && !fieldErrors.houseNo}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
             <div class="flex flex-wrap gap-1.5 mt-2">
               {#each ['47', 'Unit 3B', 'Blk 2 Lot 5', 'Room 1'] as ex (ex)}
                 <button type="button" on:click={() => houseNo = ex}
@@ -1417,6 +1587,20 @@ async function handleSubmit() {
                 </button>
               {/each}
             </div>
+          </div>
+
+          <div>
+            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Zone / Purok <span class="text-red-400">*</span></label>
+            <input id="purokInput" type="text" bind:value={purok}
+              on:blur={() => { touchedFields.purok = true; validatePurok(); }}
+              placeholder="e.g. Zone 1, Purok 2"
+              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
+              {fieldErrors.purok ? 'error-border' : (touchedFields.purok && purok && !fieldErrors.purok ? 'valid-border' : 'border-slate-200')}" />
+            {#if fieldErrors.purok}
+              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.purok}</p>
+            {:else if touchedFields.purok && purok && !fieldErrors.purok}
+              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
+            {/if}
           </div>
 
           <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
@@ -1509,7 +1693,7 @@ async function handleSubmit() {
                       </svg>
                     </div>
                     <p class="text-xs text-center text-slate-600">Upload PWD ID or medical certificate</p>
-                    <input type="file" accept="image/*" on:change={handlePwdIdChange} class="hidden" />
+                    <input id="pwdIdFileInput" type="file" accept="image/*" on:change={handlePwdIdChange} class="hidden" />
                   </label>
                 {/if}
                 {#if fieldErrors.pwdIdFile}
@@ -1572,7 +1756,7 @@ async function handleSubmit() {
                     </svg>
                   </div>
                   <p class="text-xs text-center text-slate-600">Upload Senior Citizen ID</p>
-                  <input type="file" accept="image/*" on:change={handleSeniorIdChange} class="hidden" />
+                  <input id="seniorIdFileInput" type="file" accept="image/*" on:change={handleSeniorIdChange} class="hidden" />
                 </label>
               {/if}
               {#if fieldErrors.seniorIdFile}
@@ -1628,7 +1812,7 @@ async function handleSubmit() {
                     </svg>
                   </div>
                   <p class="text-xs text-center text-slate-600">Upload Solo Parent ID</p>
-                  <input type="file" accept="image/*" on:change={handleSingleParentIdChange} class="hidden" />
+                  <input id="singleParentIdFileInput" type="file" accept="image/*" on:change={handleSingleParentIdChange} class="hidden" />
                 </label>
               {/if}
               {#if fieldErrors.singleParentIdFile}
