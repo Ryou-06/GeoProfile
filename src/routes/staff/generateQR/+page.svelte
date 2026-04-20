@@ -2,7 +2,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
 
-  const BASE_URL = 'https://overlavishly-unsequential-janean.ngrok-free.dev';
+  // UPDATED: Your permanent Vercel URL
+  const BASE_URL = 'https://geo-profile-bice.vercel.app';
 
   interface Household {
     id: string;
@@ -11,7 +12,7 @@
     notes?: string;
     createdAt: number;
     createdBy: string;
-    createdByName?: string;  // ADD THIS
+    createdByName?: string;
     registrationUrl?: string;
   }
 
@@ -109,7 +110,7 @@
         houseNo: houseNo.trim(),
         notes: notes.trim(),
         createdBy: user.uid,
-        createdByName: staffName,  // ADD THIS - stores staff name
+        createdByName: staffName,
         createdAt: serverTimestamp(),
         status: 'active',
       });
@@ -123,7 +124,7 @@
         notes: notes.trim(),
         createdAt: Date.now(),
         createdBy: user.uid,
-        createdByName: staffName,  // ADD THIS
+        createdByName: staffName,
         registrationUrl,
       };
 
@@ -144,7 +145,6 @@
     generatedHousehold = { ...hh, registrationUrl };
   }
 
-  // Rest of your functions (handlePrint, handleDownload) remain the same
   function handlePrint() {
     if (!generatedHousehold) return;
     const printWindow = window.open('', '_blank');
@@ -164,6 +164,7 @@
         .instruction-title { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
         .instruction { font-size: 10px; color: #64748b; line-height: 1.5; }
         .brgy { font-size: 11px; color: #2563eb; font-weight: 600; margin-top: 8px; }
+        .vercel-badge { font-size: 8px; color: #94a3b8; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
       </style></head><body>
       <div class="card">
         <div class="logo">📍 GeoProfile</div>
@@ -183,6 +184,7 @@
           6. Submit the form
         </div>
         <div class="brgy">Olongapo City, Zambales</div>
+        <div class="vercel-badge">Permanent QR Code · Live 24/7</div>
       </div></body></html>
     `);
     printWindow.document.close();
@@ -196,6 +198,17 @@
     a.download = `${generatedHousehold.qrId}.png`;
     a.click();
   }
+
+  // NEW: Copy registration link to clipboard
+  async function handleCopyLink() {
+    if (!generatedHousehold?.registrationUrl) return;
+    try {
+      await navigator.clipboard.writeText(generatedHousehold.registrationUrl);
+      alert('Registration link copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  }
 </script>
 
 <div class="p-6 space-y-6 min-h-full bg-slate-100 font-inter">
@@ -203,8 +216,14 @@
   <div>
     <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Generate QR Code</h1>
     <p class="text-sm text-slate-500 mt-0.5">Create a household registration QR for Barangay Pag-Asa</p>
+    <!-- NEW: Deployment badge -->
+    <div class="flex items-center gap-2 mt-2">
+      <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[0.65rem] font-semibold">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+        Live on Vercel · Permanent URL
+      </span>
+    </div>
   </div>
-
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
@@ -293,10 +312,22 @@
                 </p>
               {/if}
             </div>
-            <!-- <div class="w-full bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
-              <p class="text-[0.62rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Registration Link</p>
-              <p class="text-xs text-blue-600 font-medium break-all">{generatedHousehold.registrationUrl}</p>
-            </div> -->
+            
+            <!-- NEW: Show registration link and copy button -->
+            <div class="w-full bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
+              <p class="text-[0.62rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Registration Link (Permanent)</p>
+              <div class="flex items-center gap-2">
+                <p class="text-xs text-blue-600 font-medium break-all flex-1">{generatedHousehold.registrationUrl}</p>
+                <button type="button" on:click={handleCopyLink}
+                  class="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-all shrink-0"
+                  title="Copy link">
+                  <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
             <div class="flex gap-3 w-full">
               <button type="button" on:click={handlePrint}
                 class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
@@ -313,6 +344,13 @@
                 </svg>
                 Download
               </button>
+            </div>
+
+            <!-- NEW: Info about permanent QR -->
+            <div class="w-full bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+              <p class="text-[0.65rem] text-emerald-700 text-center font-semibold">
+                ✅ This QR code uses a permanent Vercel URL. No expiration date.
+              </p>
             </div>
           </div>
         {:else}
