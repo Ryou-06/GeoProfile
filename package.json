@@ -22,6 +22,7 @@
 		"@tailwindcss/forms": "^0.5.11",
 		"@tailwindcss/vite": "^4.1.18",
 		"@types/node": "^24",
+		"@types/nodemailer": "^8.0.0",
 		"autoprefixer": "^10.4.27",
 		"eslint": "^9.39.2",
 		"eslint-config-prettier": "^10.1.8",
@@ -41,6 +42,8 @@
 	"dependencies": {
 		"@turf/boolean-point-in-polygon": "^7.3.5",
 		"chart.js": "^4.5.1",
-		"firebase": "^12.10.0"
+		"dotenv": "^17.4.2",
+		"firebase": "^12.10.0",
+		"nodemailer": "^8.0.5"
 	}
 }

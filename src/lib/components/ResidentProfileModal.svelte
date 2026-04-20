@@ -3,6 +3,7 @@
 
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import DeclineEmailModal from './DeclineEmailModal.svelte';
 
   // ── Props ──────────────────────────────────────────────
   interface Resident {
@@ -42,7 +43,11 @@
     extensionName?: string;
   }
 
+  let showDeclineEmailModal = false;
+  let currentResidentForDecline: Resident | null = null;
+
   export let resident: Resident | null = null;
+  
 
   const dispatch = createEventDispatcher<{
     close: void;
@@ -185,23 +190,63 @@ $: proofImages = (() => {
   }
 
   // ── Approve / Decline ───────────────────────────────────
-  function openConfirm(action: 'approve' | 'decline') {
+function openConfirm(action: 'approve' | 'decline') {
+  if (action === 'decline') {
+    // Open email modal instead of simple confirm
+    currentResidentForDecline = resident;
+    showDeclineEmailModal = true;
+  } else {
     confirmModal = { open: true, action };
   }
+}
 
-  async function confirmAction() {
-    if (!resident) return;
+async function handleDeclineEmailSent() {
+  showDeclineEmailModal = false;
+  
+  // Update the status to declined in the database
+  if (resident && currentResidentForDecline) {
     try {
-      const { db }             = await import('$lib/firebase');
+      const { db } = await import('$lib/firebase');
       const { updateDoc, doc } = await import('firebase/firestore');
-      const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
-      await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
+      
+      // Update the resident status to 'declined' in Firebase
+      await updateDoc(doc(db, 'residents', resident.id), { 
+        status: 'declined' 
+      });
+      
       // Update local copy so badge reflects change immediately
-      resident = { ...resident, status: newStatus };
-      dispatch('statusChange', { id: resident.id, status: newStatus });
-    } catch (e) { console.error(e); }
-    confirmModal = { open: false, action: 'approve' };
+      resident = { ...resident, status: 'declined' };
+      
+      // Dispatch event to refresh the parent component
+      dispatch('statusChange', { id: resident.id, status: 'declined' });
+      
+      console.log('✅ Resident status updated to declined');
+      
+      // Optional: Show success message
+      alert('Resident has been declined and email notification sent.');
+    } catch (error) {
+      console.error('❌ Error updating resident status:', error);
+      alert('Failed to update resident status. Please try again.');
+    }
   }
+}
+
+async function confirmAction() {
+  if (!resident) return;
+  try {
+    const { db } = await import('$lib/firebase');
+    const { updateDoc, doc } = await import('firebase/firestore');
+    const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
+    await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
+    // Update local copy so badge reflects change immediately
+    resident = { ...resident, status: newStatus };
+    dispatch('statusChange', { id: resident.id, status: newStatus });
+  } catch (e) { 
+    console.error(e); 
+    alert('Failed to update status. Please try again.');
+  }
+  confirmModal = { open: false, action: 'approve' };
+}
 
   // ── Helpers ────────────────────────────────────────────
   function getInitials(r: Resident) {
@@ -604,6 +649,17 @@ $: proofImages = (() => {
                 </div>
               {/if}
             </div>
+
+
+<!-- Decline Email Modal -->
+{#if showDeclineEmailModal && currentResidentForDecline}
+  <DeclineEmailModal
+    resident={currentResidentForDecline}
+    householdId={currentResidentForDecline.householdId || ''}
+    on:close={() => showDeclineEmailModal = false}
+    on:emailSent={handleDeclineEmailSent}
+  />
+{/if}
 
             <!-- ══ SECTOR ID PROOF IMAGES ══════════════════════════════ -->
 {#if proofImages.length > 0}
