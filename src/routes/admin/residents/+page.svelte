@@ -46,6 +46,7 @@
   let searchQuery  = '';
   let filterStreet = 'All Streets';
   let filterStatus = 'All Status';
+  let filterSector = 'All Sectors';
 
   let selected  = new SvelteSet<string>();
   let selectAll = false;
@@ -55,6 +56,7 @@
 
   const streets  = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
   const statuses = ['All Status',  'Pending', 'Approved', 'Declined'];
+  const sectors  = ['All Sectors', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -101,7 +103,8 @@
       || r.address?.toLowerCase().includes(q);
     const matchStreet = filterStreet === 'All Streets' || r.street === filterStreet;
     const matchStatus = filterStatus === 'All Status'  || r.status === filterStatus.toLowerCase();
-    return matchSearch && matchStreet && matchStatus;
+    const matchSector = filterSector === 'All Sectors' || r.sector === filterSector;
+    return matchSearch && matchStreet && matchStatus && matchSector;
   });
 
   function toggleSelectAll() {
@@ -166,18 +169,12 @@
       <input bind:value={searchQuery} type="text" placeholder="Search by name, street, or category..."
         class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm" />
     </div>
+    <!-- Made the select wider with min-width -->
     <select bind:value={filterStatus}
-      class="text-sm border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer">
+      class="text-sm border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer min-w-[130px]">
       {#each statuses as s (s)}<option>{s}</option>{/each}
     </select>
-    <button type="button"
-      class="ml-auto flex items-center gap-1.5 text-sm font-bold text-white px-4 py-2.5 rounded-xl transition-all active:scale-95 shadow-sm"
-      style="background:#2563eb;">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V4m0 8l-3-3m3 3l3-3"/>
-      </svg>
-      Export
-    </button>
+    <!-- REMOVED: Sector dropdown and Export button -->
   </div>
 
   <!-- Street tabs -->

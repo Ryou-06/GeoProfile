@@ -305,11 +305,8 @@ async function confirmAction() {
 
 <!-- ══════════════════ PROFILE MODAL ══════════════════════════ -->
 {#if resident}
-  <!-- Backdrop -->
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-    on:click={() => dispatch('close')}></div>
+  <!-- Backdrop - REMOVED the on:click handler -->
+  <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"></div>
 
   <!-- Modal -->
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
@@ -762,7 +759,7 @@ async function confirmAction() {
             </div>
           {/if}
 
-          <!-- Action buttons -->
+          <!-- Action buttons - REMOVED the "Back" button -->
           <div class="px-5 py-4 border-t border-slate-100 bg-white shrink-0 space-y-2">
 
             {#if resident.status === 'pending'}
@@ -799,13 +796,6 @@ async function confirmAction() {
                   <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
                 </svg>
                 Print
-              </button>
-              <button type="button" on:click={() => dispatch('close')}
-                class="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-                </svg>
-                Back
               </button>
             </div>
           </div>
