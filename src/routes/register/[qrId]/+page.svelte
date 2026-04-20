@@ -1,10 +1,10 @@
 <!-- PUBLIC PWA form — no login required -->
 <!-- src/routes/register/[qrId]/+page.svelte -->
-<!-- ngrok http --domain=overlavishly-unsequential-janean.ngrok-free.dev 5173 - for running in online -->
 
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
+  import { isInsidePagAsa } from '$lib/pagasaBoundary.js';
 
   // ── QR / Household ─────────────────────────────────────
 $: qrId = $page.params.qrId;
@@ -31,7 +31,7 @@ let householdError = '';
   let gpsLat: number | null = null;
   let gpsLng: number | null = null;
   let gpsAccuracy: number | null = null;
-  let gpsStatus = 'pending'; // pending, optimizing, granted, denied, error
+  let gpsStatus = 'pending'; // pending, optimizing, granted, denied, error, outside
   let gpsAttempt = 0;
   let maxGpsRetries = 8;
   let watchId: number | null = null;
@@ -57,7 +57,6 @@ let householdError = '';
   // ── Address fields ─────────────────────────────────────
   let houseNo = '';
   let street = '';
-  let purok = '';
 
   const streets = [
     'Gordon Avenue',
@@ -108,7 +107,6 @@ let householdError = '';
     contactNo: '',
     houseNo: '',
     street: '',
-    purok: '',
     pwdType: '',
     pwdIdFile: '',
     seniorIdFile: '',
@@ -130,7 +128,6 @@ let householdError = '';
     contactNo: false,
     houseNo: false,
     street: false,
-    purok: false,
     pwdType: false,
     pwdIdFile: false,
     seniorIdFile: false,
@@ -162,7 +159,6 @@ let householdError = '';
   $: if (touchedFields.contactNo) validateContactNo();
   $: if (touchedFields.houseNo) validateHouseNo();
   $: if (touchedFields.street) validateStreet();
-  $: if (touchedFields.purok) validatePurok();
   $: if (touchedFields.pwdType && isPWD) validatePwdType();
   $: if (touchedFields.pwdIdFile && isPWD) validatePwdIdFile();
   $: if (touchedFields.seniorIdFile && isSenior) validateSeniorIdFile();
@@ -170,7 +166,7 @@ let householdError = '';
   $: if (touchedFields.housePhoto) validateHousePhoto();
 
   // ── Full address preview ────────────────────────────────
-  $: fullAddress = [houseNo.trim(), street, purok, 'Barangay Pag-Asa', 'Olongapo City', 'Zambales']
+  $: fullAddress = [houseNo.trim(), street, 'Barangay Pag-Asa', 'Olongapo City', 'Zambales']
     .filter(Boolean)
     .join(', ');
 
@@ -237,48 +233,35 @@ let householdError = '';
     return true;
   }
 
-  function validateExtensionName(): boolean {
-    fieldErrors.extensionName = '';
-    return true;
-  }
-
   function validateBirthdate(): boolean {
     if (!birthdate) {
       fieldErrors.birthdate = 'Birthdate is required';
       return false;
     }
-
     const birthDateMs = Date.parse(birthdate);
     if (Number.isNaN(birthDateMs)) {
       fieldErrors.birthdate = 'Invalid birthdate';
       return false;
     }
-
     const nowMs = Date.now();
-
     if (birthDateMs > nowMs) {
       fieldErrors.birthdate = 'Birthdate cannot be in the future';
       return false;
     }
-
     const calculatedAge = Math.floor((nowMs - birthDateMs) / (365.25 * 24 * 60 * 60 * 1000));
     const ageInDaysLocal = Math.floor((nowMs - birthDateMs) / (24 * 60 * 60 * 1000));
-
     if (calculatedAge < 0) {
       fieldErrors.birthdate = 'Invalid birthdate';
       return false;
     }
-
     if (ageInDaysLocal < 30) {
       fieldErrors.birthdate = 'Resident must be at least 1 month old';
       return false;
     }
-
     if (calculatedAge > 120) {
       fieldErrors.birthdate = 'Please verify birthdate (age exceeds 120)';
       return false;
     }
-
     fieldErrors.birthdate = '';
     return true;
   }
@@ -292,7 +275,7 @@ let householdError = '';
       fieldErrors.placeOfBirth = 'Place of birth must be at least 3 characters';
       return false;
     }
-    if (!/^[a-zA-Z\s\-ñÑ,\.]+$/.test(placeOfBirth.trim())) {
+    if (!/^[a-zA-Z\s\-ñÑ,.]+$/.test(placeOfBirth.trim())) {      
       fieldErrors.placeOfBirth = 'Place of birth should only contain letters, commas, and periods';
       return false;
     }
@@ -327,7 +310,7 @@ let householdError = '';
       fieldErrors.citizenship = 'Citizenship must be at least 2 characters';
       return false;
     }
-    if (!/^[a-zA-Z\s\-]+$/.test(citizenship.trim())) {
+    if (!/^[a-zA-Z\s-]+$/.test(citizenship.trim())) {
       fieldErrors.citizenship = 'Citizenship should only contain letters';
       return false;
     }
@@ -344,7 +327,7 @@ let householdError = '';
       fieldErrors.occupation = 'Occupation must be at least 2 characters';
       return false;
     }
-    if (!/^[a-zA-Z0-9\s\-\.\&\'\/]+$/.test(occupation.trim())) {
+    if (!/^[a-zA-Z0-9\s\-.&'/]+$/.test(occupation.trim())) {
       fieldErrors.occupation = 'Occupation contains invalid characters';
       return false;
     }
@@ -371,11 +354,7 @@ let householdError = '';
       fieldErrors.houseNo = 'House/Unit number is required';
       return false;
     }
-    if (houseNo.trim().length < 1) {
-      fieldErrors.houseNo = 'Please enter a valid house/unit number';
-      return false;
-    }
-    if (!/^[a-zA-Z0-9\s\-\#\.\/]+$/.test(houseNo.trim())) {
+    if (!/^[a-zA-Z0-9\s\-#./]+$/.test(houseNo.trim())) {      
       fieldErrors.houseNo = 'House number contains invalid characters';
       return false;
     }
@@ -389,19 +368,6 @@ let householdError = '';
       return false;
     }
     fieldErrors.street = '';
-    return true;
-  }
-
-  function validatePurok(): boolean {
-    if (!purok.trim()) {
-      fieldErrors.purok = 'Zone/Purok is required';
-      return false;
-    }
-    if (purok.trim().length < 1) {
-      fieldErrors.purok = 'Please enter a valid zone/purok';
-      return false;
-    }
-    fieldErrors.purok = '';
     return true;
   }
 
@@ -463,7 +429,6 @@ let householdError = '';
     const isContactNoValid = validateContactNo();
     const isHouseNoValid = validateHouseNo();
     const isStreetValid = validateStreet();
-    const isPurokValid = validatePurok();
     
     touchedFields.firstName = true;
     touchedFields.lastName = true;
@@ -476,13 +441,12 @@ let householdError = '';
     touchedFields.occupation = true;
     touchedFields.houseNo = true;
     touchedFields.street = true;
-    touchedFields.purok = true;
     if (contactNo.trim()) touchedFields.contactNo = true;
     
     return isFirstNameValid && isLastNameValid && isMiddleNameValid &&
            isBirthdateValid && isPlaceOfBirthValid && isSexValid && 
            isCivilStatusValid && isCitizenshipValid && isOccupationValid && 
-           isContactNoValid && isHouseNoValid && isStreetValid && isPurokValid;
+           isContactNoValid && isHouseNoValid && isStreetValid;
   }
 
   function validateStep2(): boolean {
@@ -520,7 +484,6 @@ let householdError = '';
       { condition: fieldErrors.contactNo, id: 'contactNoInput' },
       { condition: fieldErrors.houseNo, id: 'houseNoInput' },
       { condition: fieldErrors.street, id: 'streetSelect' },
-      { condition: fieldErrors.purok, id: 'purokInput' },
       { condition: fieldErrors.pwdType, id: 'pwdTypeSelect' },
       { condition: fieldErrors.pwdIdFile, id: 'pwdIdUpload' },
       { condition: fieldErrors.seniorIdFile, id: 'seniorIdUpload' },
@@ -554,140 +517,113 @@ let householdError = '';
     validateContactNo();
   }
 
-// Replace your handlePwdIdChange with this:
-function handlePwdIdChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  
-  console.log('PWD file selected on mobile:', file ? file.name : 'No file');
-  
-  if (!file) {
-    // Mobile fallback - try to get file again after a short delay
-    setTimeout(() => {
-      const retryInput = document.getElementById('pwdIdFileInput') as HTMLInputElement;
-      if (retryInput && retryInput.files && retryInput.files[0]) {
-        const retryFile = retryInput.files[0];
-        processPwdFile(retryFile);
-      }
-    }, 100);
-    return;
+  // ── Read file as base64 (no compression) ────────────────
+  function readFileAsBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => resolve((ev.target?.result as string) ?? '');
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.readAsDataURL(file);
+    });
   }
-  
-  processPwdFile(file);
-}
 
-// Add this new function to process the file
+  // ── ID file handlers (no size limit beyond 10MB, no compression) ──
+  function handlePwdIdChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      setTimeout(() => {
+        const retry = document.getElementById('pwdIdFileInput') as HTMLInputElement;
+        if (retry?.files?.[0]) processPwdFile(retry.files[0]);
+      }, 100);
+      return;
+    }
+    processPwdFile(file);
+  }
+
 function processPwdFile(file: File) {
-  console.log('Processing PWD file:', file.name, file.size);
-  
-  if (file.size > 5 * 1024 * 1024) {
-    fieldErrors.pwdIdFile = 'File must be less than 5MB';
+  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
+    fieldErrors.pwdIdFile = 'File must be less than 15MB';
     return;
   }
-  if (!file.type.startsWith('image/')) {
-    fieldErrors.pwdIdFile = 'Please select an image file';
-    return;
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.pwdIdFile = 'Please select an image file';
+      return;
+    }
+    pwdIdFile = file;
+    fieldErrors.pwdIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { pwdIdPreview = (ev.target?.result as string) ?? ''; };
+    reader.readAsDataURL(file);
   }
-  
-  pwdIdFile = file;
-  console.log('pwdIdFile stored:', pwdIdFile ? 'Yes' : 'No');
-  fieldErrors.pwdIdFile = '';
-  
-  const reader = new FileReader();
-  reader.onload = (ev) => { 
-    pwdIdPreview = (ev.target?.result as string) ?? '';
-    console.log('PWD preview created, length:', pwdIdPreview.length);
-  };
-  reader.readAsDataURL(file);
-}
 
-// Do the same for Senior
-function handleSeniorIdChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  
-  if (!file) {
-    setTimeout(() => {
-      const retryInput = document.getElementById('seniorIdFileInput') as HTMLInputElement;
-      if (retryInput && retryInput.files && retryInput.files[0]) {
-        processSeniorFile(retryInput.files[0]);
-      }
-    }, 100);
-    return;
+  function handleSeniorIdChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      setTimeout(() => {
+        const retry = document.getElementById('seniorIdFileInput') as HTMLInputElement;
+        if (retry?.files?.[0]) processSeniorFile(retry.files[0]);
+      }, 100);
+      return;
+    }
+    processSeniorFile(file);
   }
-  
-  processSeniorFile(file);
-}
 
 function processSeniorFile(file: File) {
-  if (file.size > 5 * 1024 * 1024) {
-    fieldErrors.seniorIdFile = 'File must be less than 5MB';
+  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
+    fieldErrors.seniorIdFile = 'File must be less than 15MB';
     return;
   }
-  if (!file.type.startsWith('image/')) {
-    fieldErrors.seniorIdFile = 'Please select an image file';
-    return;
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.seniorIdFile = 'Please select an image file';
+      return;
+    }
+    seniorIdFile = file;
+    fieldErrors.seniorIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { seniorIdPreview = (ev.target?.result as string) ?? ''; };
+    reader.readAsDataURL(file);
   }
-  
-  seniorIdFile = file;
-  fieldErrors.seniorIdFile = '';
-  
-  const reader = new FileReader();
-  reader.onload = (ev) => { seniorIdPreview = (ev.target?.result as string) ?? ''; };
-  reader.readAsDataURL(file);
-}
 
-
-// Do the same for Single Parent
-function handleSingleParentIdChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  
-  if (!file) {
-    setTimeout(() => {
-      const retryInput = document.getElementById('singleParentIdFileInput') as HTMLInputElement;
-      if (retryInput && retryInput.files && retryInput.files[0]) {
-        processSingleParentFile(retryInput.files[0]);
-      }
-    }, 100);
-    return;
+  function handleSingleParentIdChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      setTimeout(() => {
+        const retry = document.getElementById('singleParentIdFileInput') as HTMLInputElement;
+        if (retry?.files?.[0]) processSingleParentFile(retry.files[0]);
+      }, 100);
+      return;
+    }
+    processSingleParentFile(file);
   }
-  
-  processSingleParentFile(file);
-}
 
 function processSingleParentFile(file: File) {
-  if (file.size > 5 * 1024 * 1024) {
-    fieldErrors.singleParentIdFile = 'File must be less than 5MB';
+  if (file.size > 15 * 1024 * 1024) {  // Changed from 10MB to 15MB
+    fieldErrors.singleParentIdFile = 'File must be less than 15MB';
     return;
   }
-  if (!file.type.startsWith('image/')) {
-    fieldErrors.singleParentIdFile = 'Please select an image file';
-    return;
+    if (!file.type.startsWith('image/')) {
+      fieldErrors.singleParentIdFile = 'Please select an image file';
+      return;
+    }
+    singleParentIdFile = file;
+    fieldErrors.singleParentIdFile = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => { singleParentIdPreview = (ev.target?.result as string) ?? ''; };
+    reader.readAsDataURL(file);
   }
-  
-  singleParentIdFile = file;
-  fieldErrors.singleParentIdFile = '';
-  
-  const reader = new FileReader();
-  reader.onload = (ev) => { singleParentIdPreview = (ev.target?.result as string) ?? ''; };
-  reader.readAsDataURL(file);
-}
 
   // ── GPS Functions ─────────────────────────────────────
   function isValidLocation(lat: number, lng: number, accuracy: number): boolean {
     if (isNaN(lat) || isNaN(lng)) return false;
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
     if (accuracy > 1000) return false;
-    
     if (lastLocation) {
       const distance = calculateDistance(lastLocation.lat, lastLocation.lng, lat, lng);
-      if (distance > 0.5) {
-        console.log('Location jump too large:', distance, 'km');
-        return false;
-      }
+      if (distance > 0.5) return false;
     }
-    
     return true;
   }
 
@@ -698,8 +634,7 @@ function processSingleParentFile(file: File) {
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   function stopGPS() {
@@ -721,7 +656,6 @@ function processSingleParentFile(file: File) {
     }
 
     stopGPS();
-    
     gpsStatus = 'pending';
     gpsAttempt = 0;
     gpsRetryCount = 0;
@@ -737,7 +671,6 @@ function processSingleParentFile(file: File) {
       if (gpsStatus === 'pending' || gpsStatus === 'optimizing') {
         gpsStatus = 'error';
         gpsMessage = 'GPS request timed out (45s). Please go outdoors and try again.';
-        console.error('GPS timeout after 45 seconds');
       }
     }, 45000);
 
@@ -747,15 +680,9 @@ function processSingleParentFile(file: File) {
         const newLng = pos.coords.longitude;
         const newAccuracy = Math.round(pos.coords.accuracy * 10) / 10;
 
-        console.log(`GPS Update ${gpsAttempt + 1}:`, { lat: newLat, lng: newLng, accuracy: newAccuracy });
-
-        if (!isValidLocation(newLat, newLng, newAccuracy)) {
-          console.log('Invalid location, ignoring');
-          return;
-        }
+        if (!isValidLocation(newLat, newLng, newAccuracy)) return;
 
         lastLocation = { lat: newLat, lng: newLng, accuracy: newAccuracy };
-        
         gpsLat = newLat;
         gpsLng = newLng;
         gpsAccuracy = newAccuracy;
@@ -766,37 +693,35 @@ function processSingleParentFile(file: File) {
 
         gpsAttempt++;
 
-        if (newAccuracy <= 15) {
-          gpsStatus = 'granted';
-          gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
-          gpsRetryCount = 0;
+        // ── Check boundary once we have a good enough reading ──
+        const shouldFinalize = newAccuracy <= 15 || (newAccuracy <= 30 && gpsAttempt >= 2) || gpsAttempt >= maxGpsRetries;
+
+        if (shouldFinalize) {
           stopGPS();
-        } 
-        else if (newAccuracy <= 30 && gpsAttempt >= 2) {
-          gpsStatus = 'granted';
-          gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
-          stopGPS();
-        }
-        else if (gpsAttempt >= maxGpsRetries) {
-          gpsStatus = 'granted';
-          gpsMessage = `📍 Location locked (±${newAccuracy}m - Best effort)`;
-          stopGPS();
-        }
-        else {
+          // ── BOUNDARY CHECK ──────────────────────────────────
+          if (!isInsidePagAsa(newLat, newLng)) {
+            gpsStatus = 'outside';
+            gpsMessage = '❌ You are outside Barangay Pag-Asa.';
+          } else {
+            gpsStatus = 'granted';
+            if (newAccuracy <= 15) {
+              gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
+            } else {
+              gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
+            }
+          }
+        } else {
           gpsStatus = 'optimizing';
           const remainingRetries = maxGpsRetries - gpsAttempt;
           gpsMessage = `Optimizing accuracy (±${newAccuracy}m) • ${remainingRetries} more attempts • Keep phone steady`;
         }
       },
       (err) => {
-        console.error('❌ GPS Error:', err.code, err.message);
-        
         if (err.code === err.PERMISSION_DENIED) {
           gpsStatus = 'denied';
           gpsMessage = 'Location permission denied. Please enable location access in your browser settings.';
           stopGPS();
-        } 
-        else if (err.code === err.POSITION_UNAVAILABLE) {
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
           gpsRetryCount++;
           if (gpsRetryCount < 3) {
             gpsMessage = `GPS unavailable (attempt ${gpsRetryCount}/3). Please go outdoors.`;
@@ -805,8 +730,7 @@ function processSingleParentFile(file: File) {
             gpsMessage = 'GPS unavailable. Please go outdoors and ensure GPS is enabled.';
             stopGPS();
           }
-        } 
-        else if (err.code === err.TIMEOUT) {
+        } else if (err.code === err.TIMEOUT) {
           gpsRetryCount++;
           if (gpsRetryCount < 3) {
             gpsMessage = `GPS timeout (attempt ${gpsRetryCount}/3). Moving outdoors may help.`;
@@ -815,23 +739,17 @@ function processSingleParentFile(file: File) {
             gpsMessage = 'GPS request timed out. Move to an open area and try again.';
             stopGPS();
           }
-        }
-        else {
+        } else {
           gpsStatus = 'error';
           gpsMessage = 'GPS error: ' + err.message;
           stopGPS();
         }
       },
-      { 
-        enableHighAccuracy: true, 
-        timeout: 15000,
-        maximumAge: 0 
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
   function retryGPS() {
-    console.log('Manually retrying GPS...');
     stopGPS();
     gpsLat = null;
     gpsLng = null;
@@ -839,57 +757,51 @@ function processSingleParentFile(file: File) {
     requestGPSEnhanced();
   }
 
-// ── SINGLE onMount ────
-onMount(() => {
-  const currentQrId = window.location.pathname.split('/').pop() ?? '';
+  // ── SINGLE onMount ────
+  onMount(() => {
+    const currentQrId = window.location.pathname.split('/').pop() ?? '';
 
-  requestGPSEnhanced();
-  
-  if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
+    requestGPSEnhanced();
+    
+    if (currentQrId) localStorage.setItem('last_qr_id', currentQrId);
 
-  (async () => {
-    try {
-      const { db } = await import('$lib/firebase');
-      const { collection, query, where, getDocs } = await import('firebase/firestore');
+    (async () => {
+      try {
+        const { db } = await import('$lib/firebase');
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
 
-      const snap = await getDocs(
-        query(collection(db, 'households'), where('qrId', '==', currentQrId))
-      );
+        const snap = await getDocs(
+          query(collection(db, 'households'), where('qrId', '==', currentQrId))
+        );
 
-      if (snap.empty) {
-        householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
-      } else {
-        const docData = snap.docs[0].data();
-        household = { 
-          id: snap.docs[0].id, 
-          ...docData 
-        } as Household;
-        if (household?.houseNo) houseNo = household.houseNo;
-        if (household?.street) street = household.street;
-        if (household?.zone) purok = household.zone;
+        if (snap.empty) {
+          householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
+        } else {
+          const docData = snap.docs[0].data();
+          household = { id: snap.docs[0].id, ...docData } as Household;
+          if (household?.houseNo) houseNo = household.houseNo;
+          if (household?.street) street = household.street;
+        }
+      } catch (e) {
+        householdError = 'Could not load household info. Please check your internet connection.';
+        console.error(e);
+      } finally {
+        householdLoading = false;
       }
-    } catch (e) {
-      householdError = 'Could not load household info. Please check your internet connection.';
-      console.error(e);
-    } finally {
-      householdLoading = false;
-    }
-  })();
+    })();
 
-  return () => {
-    stopGPS();
-  };
-});
+    return () => { stopGPS(); };
+  });
 
-  // ── House photo handler ────────────────────────────────
-  function handlePhotoChange(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      fieldErrors.housePhoto = 'Photo must be less than 5MB';
-      return;
-    }
+  // ── House photo handler (15MB limit) ──────────────────
+function handlePhotoChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > 15 * 1024 * 1024) {
+    fieldErrors.housePhoto = 'Photo must be less than 15MB';
+    return;
+  }
     if (!file.type.startsWith('image/')) {
       fieldErrors.housePhoto = 'Please select an image file';
       return;
@@ -901,182 +813,158 @@ onMount(() => {
     reader.readAsDataURL(file);
   }
 
-// ── Helper function to compress image ───────────────────
-async function compressImage(file: File): Promise<string | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    
-    img.onload = () => {
-      const maxW = 800, maxH = 600;
-      let w = img.width, h = img.height;
-      if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
-      if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(objectUrl);
-      const base64Data = canvas.toDataURL('image/jpeg', 0.7);
-      console.log('Compressed image size:', base64Data.length);
-      resolve(base64Data);
-    };
-    
-    img.onerror = (err) => {
-      console.error('Image load error:', err);
-      resolve(null);
-    };
-    
-    img.src = objectUrl;
-  });
-}
+  // ── Compress only the house photo ───────────────────────
+  async function compressImage(file: File): Promise<string | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        const maxW = 1200, maxH = 900;
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(objectUrl);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => resolve(null);
+      img.src = objectUrl;
+    });
+  }
 
   // ── Step navigation with validation ────────────────────
-  function nextStep() {
-    errorMsg = '';
-    
-    if (step === 1) {
-      if (!validateStep1()) {
-        errorMsg = 'Please fill in all required fields correctly';
-        scrollToFirstError();
-        return;
-      }
-      step++;
-    } else if (step === 2) {
-      if (!validateStep2()) {
-        errorMsg = 'Please complete all required fields';
-        scrollToFirstError();
-        return;
-      }
-      step++;
+function nextStep() {
+  errorMsg = '';
+  
+  // Add boundary check before proceeding from step 1
+  if (step === 1) {
+    if (gpsStatus === 'outside') {
+      errorMsg = '❌ You must be inside Barangay Pag-Asa to register.';
+      scrollToFirstError();
+      return;
     }
+    
+    if (gpsLat === null || gpsLng === null) {
+      errorMsg = '❌ Please wait for GPS to lock your location before proceeding.';
+      scrollToFirstError();
+      return;
+    }
+    
+    if (!validateStep1()) {
+      errorMsg = 'Please fill in all required fields correctly';
+      scrollToFirstError();
+      return;
+    }
+    step++;
+  } else if (step === 2) {
+    if (!validateStep2()) {
+      errorMsg = 'Please complete all required fields';
+      scrollToFirstError();
+      return;
+    }
+    step++;
   }
+}
 
   function prevStep() {
     errorMsg = '';
     step--;
   }
 
-// ── Submit ────────────────────────────────────────────
-async function handleSubmit() {
-  errorMsg = '';
-  
-  const isStep1Valid = validateStep1();
-  const isStep2Valid = validateStep2();
-  const isStep3Valid = validateStep3();
-  
-  if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
-    errorMsg = 'Please complete all required fields correctly before submitting';
-    if (!isStep1Valid) {
-      step = 1;
-      setTimeout(() => scrollToFirstError(), 100);
-    } else if (!isStep2Valid) {
-      step = 2;
-      setTimeout(() => scrollToFirstError(), 100);
-    } else if (!isStep3Valid) {
-      step = 3;
-      setTimeout(() => scrollToFirstError(), 100);
+  // ── Submit ────────────────────────────────────────────
+  async function handleSubmit() {
+    errorMsg = '';
+
+    if (gpsLat === null || gpsLng === null) {
+      errorMsg = '❌ Location required. Please enable GPS and wait for it to lock before submitting.';
+      return;
     }
-    return;
+
+    if (!isInsidePagAsa(gpsLat, gpsLng)) {
+      errorMsg = '❌ Registration blocked. Your current location is outside Barangay Pag-Asa, Olongapo City.';
+      return;
+    }
+
+    const isStep1Valid = validateStep1();
+    const isStep2Valid = validateStep2();
+    const isStep3Valid = validateStep3();
+    
+    if (!isStep1Valid || !isStep2Valid || !isStep3Valid) {
+      errorMsg = 'Please complete all required fields correctly before submitting';
+      if (!isStep1Valid) { step = 1; setTimeout(() => scrollToFirstError(), 100); }
+      else if (!isStep2Valid) { step = 2; setTimeout(() => scrollToFirstError(), 100); }
+      else if (!isStep3Valid) { step = 3; setTimeout(() => scrollToFirstError(), 100); }
+      return;
+    }
+
+    loading = true;
+    try {
+      const { db } = await import('$lib/firebase');
+      const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+
+      // Compress only the house photo; read ID proofs as raw base64
+      const housePhotoUrl = housePhoto ? await compressImage(housePhoto) : null;
+      const pwdIdUrl      = pwdIdFile        ? await readFileAsBase64(pwdIdFile)        : null;
+      const seniorIdUrl   = seniorIdFile     ? await readFileAsBase64(seniorIdFile)     : null;
+      const singleParentUrl = singleParentIdFile ? await readFileAsBase64(singleParentIdFile) : null;
+
+      const residentData = {
+        householdId: household?.id ?? null,
+        qrId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        middleName: middleName.trim(),
+        extensionName: extensionName,
+        name: fullName,
+        birthdate,
+        placeOfBirth: placeOfBirth.trim(),
+        age: age ?? 0,
+        sex,
+        civilStatus,
+        citizenship: citizenship.trim(),
+        occupation: occupation.trim(),
+        contactNo: contactNo.trim(),
+        houseNo: houseNo.trim(),
+        street,
+        landmark: household?.landmark ?? '',
+        barangay: 'Barangay Pag-Asa',
+        city: 'Olongapo City',
+        province: 'Zambales',
+        region: 'Region III - Central Luzon',
+        address: fullAddress,
+        isPWD,
+        isSenior,
+        isSingleParent,
+        pwdType: isPWD ? pwdType : null,
+        pwdIdProof: pwdIdUrl,
+        seniorIdProof: seniorIdUrl,
+        singleParentIdProof: singleParentUrl,
+        lat: gpsLat,
+        lng: gpsLng,
+        gpsAccuracy,
+        bestAccuracy,
+        gpsAttempts: gpsAttempt,
+        photoUrl: housePhotoUrl,
+        status: 'pending',
+        submittedAt: serverTimestamp(),
+        encodedBy: null,
+      };
+
+      await addDoc(collection(db, 'residents'), residentData);
+
+      submitted = true;
+      localStorage.removeItem('last_qr_id');
+    } catch (e) {
+      errorMsg = 'Submission failed. Please check your internet and try again.';
+      console.error(e);
+    } finally {
+      loading = false;
+    }
   }
-
-  loading = true;
-  try {
-    const { db } = await import('$lib/firebase');
-    const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
-
-    // Debug: Log file status before compression
-    console.log('=== FILE STATUS BEFORE COMPRESSION ===');
-    console.log('PWD File:', pwdIdFile ? { name: pwdIdFile.name, size: pwdIdFile.size, type: pwdIdFile.type } : 'null');
-    console.log('Senior File:', seniorIdFile ? { name: seniorIdFile.name, size: seniorIdFile.size, type: seniorIdFile.type } : 'null');
-    console.log('Single Parent File:', singleParentIdFile ? { name: singleParentIdFile.name, size: singleParentIdFile.size, type: singleParentIdFile.type } : 'null');
-    console.log('House Photo:', housePhoto ? { name: housePhoto.name, size: housePhoto.size, type: housePhoto.type } : 'null');
-    console.log('=========================================');
-
-    // Compress images
-    console.log('Starting image compression...');
-    const housePhotoUrl = housePhoto ? await compressImage(housePhoto) : null;
-    const pwdIdUrl = pwdIdFile ? await compressImage(pwdIdFile) : null;
-    const seniorIdUrl = seniorIdFile ? await compressImage(seniorIdFile) : null;
-    const singleParentIdUrl = singleParentIdFile ? await compressImage(singleParentIdFile) : null;
-
-    console.log('Compression results:', {
-      housePhotoUrl: housePhotoUrl ? 'Has data (length: ' + housePhotoUrl.length + ')' : 'null',
-      pwdIdUrl: pwdIdUrl ? 'Has data (length: ' + pwdIdUrl.length + ')' : 'null',
-      seniorIdUrl: seniorIdUrl ? 'Has data' : 'null',
-      singleParentIdUrl: singleParentIdUrl ? 'Has data' : 'null'
-    });
-
-    // Build resident data object
-    const residentData = {
-      householdId: household?.id ?? null,
-      qrId,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      middleName: middleName.trim(),
-      extensionName: extensionName,
-      name: fullName,
-      birthdate,
-      placeOfBirth: placeOfBirth.trim(),
-      age: age ?? 0,
-      sex,
-      civilStatus,
-      citizenship: citizenship.trim(),
-      occupation: occupation.trim(),
-      contactNo: contactNo.trim(),
-      houseNo: houseNo.trim(),
-      street,
-      purok,
-      zone: purok,
-      sector: purok,
-      landmark: household?.landmark ?? '',
-      barangay: 'Barangay Pag-Asa',
-      city: 'Olongapo City',
-      province: 'Zambales',
-      region: 'Region III - Central Luzon',
-      address: fullAddress,
-      isPWD,
-      isSenior,
-      isSingleParent,
-      pwdType: isPWD ? pwdType : null,
-      // Store the compressed base64 strings (will be null if no file)
-      pwdIdProof: pwdIdUrl,
-      seniorIdProof: seniorIdUrl,
-      singleParentIdProof: singleParentIdUrl,
-      lat: gpsLat,
-      lng: gpsLng,
-      gpsAccuracy,
-      bestAccuracy,
-      gpsAttempts: gpsAttempt,
-      photoUrl: housePhotoUrl,
-      status: 'pending',
-      submittedAt: serverTimestamp(),
-      encodedBy: null,
-    };
-
-    console.log('Final residentData ready for save:', {
-      isPWD: residentData.isPWD,
-      pwdIdProof: residentData.pwdIdProof ? 'Has base64 data (length: ' + residentData.pwdIdProof.length + ')' : 'null',
-      isSenior: residentData.isSenior,
-      seniorIdProof: residentData.seniorIdProof ? 'Has base64 data' : 'null',
-      isSingleParent: residentData.isSingleParent,
-      singleParentIdProof: residentData.singleParentIdProof ? 'Has base64 data' : 'null',
-      photoUrl: residentData.photoUrl ? 'Has base64 data' : 'null'
-    });
-
-    await addDoc(collection(db, 'residents'), residentData);
-
-    submitted = true;
-    localStorage.removeItem('last_qr_id');
-  } catch (e) {
-    errorMsg = 'Submission failed. Please check your internet and try again.';
-    console.error(e);
-  } finally {
-    loading = false;
-  }
-}
-
 </script>
 
 <!-- PWA meta -->
@@ -1087,26 +975,15 @@ async function handleSubmit() {
   <meta name="theme-color" content="#0f2060" />
   <title>GeoProfile — Resident Registration</title>
   <style>
-    .shake-error {
-      animation: shake 0.3s ease-in-out;
-    }
+    .shake-error { animation: shake 0.3s ease-in-out; }
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
       25%       { transform: translateX(-5px); }
       75%       { transform: translateX(5px); }
     }
-    .error-border {
-      border-color: #ef4444 !important;
-      background-color: #fef2f2 !important;
-    }
-    .valid-border {
-      border-color: #10b981 !important;
-    }
-    .disabled-button {
-      opacity: 0.5;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
+    .error-border  { border-color: #ef4444 !important; background-color: #fef2f2 !important; }
+    .valid-border  { border-color: #10b981 !important; }
+    .disabled-button { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
   </style>
 </svelte:head>
 
@@ -1125,6 +1002,9 @@ async function handleSubmit() {
         {#if gpsStatus === 'granted'}
           <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
           <span class="text-white/70 text-[0.65rem] font-semibold">GPS ✓</span>
+        {:else if gpsStatus === 'outside'}
+          <span class="w-2 h-2 rounded-full bg-red-400"></span>
+          <span class="text-white/70 text-[0.65rem] font-semibold">Outside Area</span>
         {:else if gpsStatus === 'optimizing'}
           <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
           <span class="text-white/70 text-[0.65rem] font-semibold">Optimizing…</span>
@@ -1164,6 +1044,39 @@ async function handleSubmit() {
       </div>
       <h2 class="font-nunito font-extrabold text-slate-700 text-lg mb-2">Invalid QR Code</h2>
       <p class="text-sm text-slate-500">{householdError}</p>
+    </div>
+
+  <!-- ══ OUTSIDE PAGASA — HARD BLOCK ══ -->
+  {:else if gpsStatus === 'outside'}
+    <div class="p-6 flex flex-col items-center text-center mt-8">
+      <div class="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-5">
+        <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636A9 9 0 115.636 18.364 9 9 0 0118.364 5.636z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01"/>
+        </svg>
+      </div>
+      <h2 class="font-nunito font-extrabold text-slate-800 text-2xl mb-2">Outside Pag-Asa</h2>
+      <p class="text-slate-500 text-sm leading-relaxed max-w-xs mb-2">
+        Your GPS location shows you are <strong>outside Barangay Pag-Asa</strong>, Olongapo City.
+      </p>
+      <p class="text-slate-400 text-xs leading-relaxed max-w-xs mb-6">
+        You must be physically inside the barangay to register. If you believe this is an error, move to an open area and retry your GPS.
+      </p>
+      <div class="w-full max-w-xs bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 text-left">
+        <p class="text-xs font-bold text-red-500 uppercase tracking-widest mb-1">Your Detected Location</p>
+        {#if gpsLat && gpsLng}
+          <p class="text-xs font-mono text-red-700">{gpsLat.toFixed(6)}, {gpsLng.toFixed(6)}</p>
+          <p class="text-xs text-red-500 mt-1">Accuracy: ±{gpsAccuracy ?? 'N/A'}m</p>
+        {/if}
+      </div>
+      <button type="button" on:click={retryGPS}
+        class="w-full max-w-xs py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg active:scale-[0.98] transition-all"
+        style="background: #0f2060;">
+        🔄 Retry GPS
+      </button>
+      <p class="text-xs text-slate-400 mt-4 max-w-xs">
+        Tip: Go outdoors, away from tall buildings, and wait a moment before retrying.
+      </p>
     </div>
 
   <!-- Success screen -->
@@ -1214,7 +1127,7 @@ async function handleSubmit() {
         <div class="min-w-0">
           <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Household</p>
           <p class="font-bold text-slate-700 text-sm truncate">{household?.houseNo} {household?.street}</p>
-          <p class="text-xs text-slate-500">{household?.zone}, Brgy. Pag-Asa · {qrId}</p>
+          <p class="text-xs text-slate-500">{household?.zone ?? ''}{household?.zone ? ', ' : ''}Brgy. Pag-Asa · {qrId}</p>
         </div>
       </div>
 
@@ -1262,6 +1175,7 @@ async function handleSubmit() {
             </p>
           </div>
         </div>
+        
       {:else if gpsStatus === 'denied' || gpsStatus === 'error'}
         <div class="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <svg class="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1269,9 +1183,7 @@ async function handleSubmit() {
           </svg>
           <div class="flex-1">
             <p class="text-xs font-bold text-amber-700">{gpsMessage}</p>
-            <button 
-              type="button" 
-              on:click={retryGPS} 
+            <button type="button" on:click={retryGPS}
               class="text-xs font-bold text-amber-700 underline hover:text-amber-800 mt-1">
               🔄 Tap to retry GPS
             </button>
@@ -1301,6 +1213,22 @@ async function handleSubmit() {
           </div>
         {/each}
       </div>
+      <!-- Add this right after the GPS Status Banner -->
+{#if gpsStatus === 'outside'}
+  <div class="flex items-start gap-2.5 bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3">
+    <svg class="w-5 h-5 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+    </svg>
+    <div class="flex-1">
+      <p class="text-sm font-bold text-red-700">⛔ Outside Barangay Pag-Asa</p>
+      <p class="text-xs text-red-600 mt-1">Registration is only allowed for residents physically inside Barangay Pag-Asa, Olongapo City.</p>
+      <button type="button" on:click={retryGPS}
+        class="text-xs font-bold text-red-700 underline hover:text-red-800 mt-2">
+        🔄 Retry GPS Location
+      </button>
+    </div>
+  </div>
+{/if}
 
       <!-- Error banner -->
       {#if errorMsg}
@@ -1399,7 +1327,7 @@ async function handleSubmit() {
               <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Place of Birth <span class="text-red-400">*</span></label>
               <input id="placeOfBirthInput" type="text" bind:value={placeOfBirth}
                 on:blur={() => { touchedFields.placeOfBirth = true; validatePlaceOfBirth(); }}
-                placeholder="e.g. Olongapo City, Zambales"
+                placeholder="e.g. Olongapo City"
                 class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
                 {fieldErrors.placeOfBirth ? 'error-border' : (touchedFields.placeOfBirth && placeOfBirth && !fieldErrors.placeOfBirth ? 'valid-border' : 'border-slate-200')}" />
               {#if fieldErrors.placeOfBirth}
@@ -1424,7 +1352,6 @@ async function handleSubmit() {
                 <select id="sexSelect" bind:value={sex}
                   on:change={() => { touchedFields.sex = true; validateSex(); }}
                   class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                         {sex === '' ? 'text-slate-300' : 'text-slate-700'}
                          {fieldErrors.sex ? 'error-border' : (touchedFields.sex && !fieldErrors.sex && sex ? 'valid-border' : 'border-slate-200')}">
                   <option value="" disabled selected>Select</option>
                   <option value="Male">Male</option>
@@ -1444,7 +1371,6 @@ async function handleSubmit() {
                 <select id="civilStatusSelect" bind:value={civilStatus}
                   on:change={() => { touchedFields.civilStatus = true; validateCivilStatus(); }}
                   class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all appearance-none cursor-pointer
-                         {civilStatus === '' ? 'text-slate-300' : 'text-slate-700'}
                          {fieldErrors.civilStatus ? 'error-border' : (touchedFields.civilStatus && !fieldErrors.civilStatus && civilStatus ? 'valid-border' : 'border-slate-200')}">
                   <option value="" disabled selected>Select</option>
                   <option value="Single">Single</option>
@@ -1506,15 +1432,12 @@ async function handleSubmit() {
             {:else if touchedFields.occupation && occupation && !fieldErrors.occupation}
               <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
             {/if}
-            <p class="text-[0.6rem] text-slate-400 mt-1 ml-1">Enter your current profession or "Student" if studying</p>
           </div>
         </div>
 
         <!-- Address section -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-          <div class="flex items-center gap-1.5">
-            <h3 class="font-nunito font-extrabold text-slate-700">Address</h3>
-          </div>
+          <h3 class="font-nunito font-extrabold text-slate-700">Address</h3>
 
           <div>
             <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Region</label>
@@ -1589,20 +1512,6 @@ async function handleSubmit() {
             </div>
           </div>
 
-          <div>
-            <label class="block text-[0.65rem] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Zone / Purok <span class="text-red-400">*</span></label>
-            <input id="purokInput" type="text" bind:value={purok}
-              on:blur={() => { touchedFields.purok = true; validatePurok(); }}
-              placeholder="e.g. Zone 1, Purok 2"
-              class="w-full px-3 py-2.5 rounded-xl border-2 bg-slate-50 text-slate-700 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100 transition-all
-              {fieldErrors.purok ? 'error-border' : (touchedFields.purok && purok && !fieldErrors.purok ? 'valid-border' : 'border-slate-200')}" />
-            {#if fieldErrors.purok}
-              <p class="text-xs text-red-500 mt-1 ml-1">{fieldErrors.purok}</p>
-            {:else if touchedFields.purok && purok && !fieldErrors.purok}
-              <p class="text-xs text-green-500 mt-1 ml-1">✓ Valid</p>
-            {/if}
-          </div>
-
           <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-400 mb-1">Full Address Preview</p>
             <p class="text-xs text-blue-700 font-semibold leading-relaxed">
@@ -1623,8 +1532,7 @@ async function handleSubmit() {
           <button type="button" on:click={() => { isPWD = !isPWD; if (!isPWD) { pwdType = ''; pwdIdFile = null; pwdIdPreview = ''; fieldErrors.pwdIdFile = ''; fieldErrors.pwdType = ''; } }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
                    {isPWD ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                        {isPWD ? 'bg-amber-400' : 'bg-slate-200'}">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 {isPWD ? 'bg-amber-400' : 'bg-slate-200'}">
               <svg class="w-5 h-5 {isPWD ? 'text-white' : 'text-slate-400'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
               </svg>
@@ -1633,8 +1541,7 @@ async function handleSubmit() {
               <p class="font-bold text-slate-700 text-sm">Person with Disability (PWD)</p>
               <p class="text-xs text-slate-400">Physical, mental, or sensory disability</p>
             </div>
-            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0
-                        {isPWD ? 'border-amber-400 bg-amber-400' : 'border-slate-300'}">
+            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 {isPWD ? 'border-amber-400 bg-amber-400' : 'border-slate-300'}">
               {#if isPWD}
                 <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -1693,6 +1600,7 @@ async function handleSubmit() {
                       </svg>
                     </div>
                     <p class="text-xs text-center text-slate-600">Upload PWD ID or medical certificate</p>
+                    <p class="text-[0.65rem] text-slate-400">Max 15MB</p>
                     <input id="pwdIdFileInput" type="file" accept="image/*" on:change={handlePwdIdChange} class="hidden" />
                   </label>
                 {/if}
@@ -1703,13 +1611,12 @@ async function handleSubmit() {
             </div>
           {/if}
 
-          <!-- Senior toggle (Disabled if age < 60) -->
+          <!-- Senior toggle -->
           <button type="button" on:click={() => { if (!isSeniorDisabled) isSenior = !isSenior; }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
                    {isSenior ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}
                    {isSeniorDisabled ? 'opacity-50 cursor-not-allowed' : ''}">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                        {isSenior ? 'bg-emerald-500' : 'bg-slate-200'}">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 {isSenior ? 'bg-emerald-500' : 'bg-slate-200'}">
               <svg class="w-5 h-5 {isSenior ? 'text-white' : 'text-slate-400'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
               </svg>
@@ -1723,8 +1630,7 @@ async function handleSubmit() {
                 {/if}
               </p>
             </div>
-            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0
-                        {isSenior ? 'border-emerald-400 bg-emerald-400' : 'border-slate-300'}">
+            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 {isSenior ? 'border-emerald-400 bg-emerald-400' : 'border-slate-300'}">
               {#if isSenior}
                 <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -1756,6 +1662,7 @@ async function handleSubmit() {
                     </svg>
                   </div>
                   <p class="text-xs text-center text-slate-600">Upload Senior Citizen ID</p>
+                  <p class="text-[0.65rem] text-slate-400">Max 15MB</p>
                   <input id="seniorIdFileInput" type="file" accept="image/*" on:change={handleSeniorIdChange} class="hidden" />
                 </label>
               {/if}
@@ -1769,8 +1676,7 @@ async function handleSubmit() {
           <button type="button" on:click={() => { isSingleParent = !isSingleParent; if (!isSingleParent) { singleParentIdFile = null; singleParentIdPreview = ''; fieldErrors.singleParentIdFile = ''; } }}
             class="w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all
                    {isSingleParent ? 'border-violet-400 bg-violet-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}">
-            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                        {isSingleParent ? 'bg-violet-500' : 'bg-slate-200'}">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 {isSingleParent ? 'bg-violet-500' : 'bg-slate-200'}">
               <svg class="w-5 h-5 {isSingleParent ? 'text-white' : 'text-slate-400'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
               </svg>
@@ -1779,8 +1685,7 @@ async function handleSubmit() {
               <p class="font-bold text-slate-700 text-sm">Single Parent</p>
               <p class="text-xs text-slate-400">Solo parent with child/children</p>
             </div>
-            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0
-                        {isSingleParent ? 'border-violet-400 bg-violet-400' : 'border-slate-300'}">
+            <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 {isSingleParent ? 'border-violet-400 bg-violet-400' : 'border-slate-300'}">
               {#if isSingleParent}
                 <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
@@ -1812,6 +1717,7 @@ async function handleSubmit() {
                     </svg>
                   </div>
                   <p class="text-xs text-center text-slate-600">Upload Solo Parent ID</p>
+                  <p class="text-[0.65rem] text-slate-400">Max 15MB</p>
                   <input id="singleParentIdFileInput" type="file" accept="image/*" on:change={handleSingleParentIdChange} class="hidden" />
                 </label>
               {/if}
@@ -1862,7 +1768,7 @@ async function handleSubmit() {
                 </div>
                 <div class="text-center">
                   <p class="text-sm font-bold text-slate-700">Take Photo or Upload</p>
-                  <p class="text-xs text-slate-400 mt-0.5">Front view of your house · Max 5MB</p>
+                  <p class="text-xs text-slate-400 mt-0.5">Front view of your house · Max 15MB</p>
                 </div>
                 <input type="file" accept="image/*" capture="environment" on:change={handlePhotoChange} class="hidden" />
               </label>
@@ -1889,10 +1795,10 @@ async function handleSubmit() {
             </div>
             <div class="border-t border-slate-200 pt-2 mt-2 space-y-1">
               <p class="text-[0.65rem] font-bold text-slate-600 uppercase tracking-widest">📍 GPS Location</p>
-              {#if gpsStatus === 'granted' || gpsStatus === 'optimizing'}
+              {#if gpsStatus === 'granted'}
                 <div class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-green-400"></span>
-                  <span class="text-xs text-green-600 font-semibold">Location captured ✓</span>
+                  <span class="text-xs text-green-600 font-semibold">Location captured · Inside Pag-Asa ✓</span>
                 </div>
                 <p class="text-[0.7rem] text-slate-500 font-mono">Lat: {gpsLat?.toFixed(6)}</p>
                 <p class="text-[0.7rem] text-slate-500 font-mono">Lng: {gpsLng?.toFixed(6)}</p>
@@ -1902,7 +1808,7 @@ async function handleSubmit() {
                   <span class="w-2 h-2 rounded-full bg-amber-400"></span>
                   <span class="text-xs text-amber-600 font-semibold">No GPS location</span>
                 </div>
-                <p class="text-[0.7rem] text-amber-500">Submission allowed without GPS</p>
+                <p class="text-[0.7rem] text-red-500 font-bold">⚠️ GPS required to submit</p>
               {/if}
             </div>
           </div>
@@ -1918,12 +1824,13 @@ async function handleSubmit() {
           </button>
         {/if}
 
-        {#if step < 3}
-          <button type="button" on:click={nextStep}
-            class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg"
-            style="background: #0f2060;">
-            Next →
-          </button>
+{#if step < 3}
+  <button type="button" on:click={nextStep}
+    disabled={step === 1 && (gpsStatus === 'outside' || gpsLat === null)}
+    class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+    style="background: #0f2060;">
+    Next →
+  </button>
         {:else}
           <button type="button" on:click={handleSubmit} disabled={loading}
             class="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"

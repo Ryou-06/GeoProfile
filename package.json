@@ -39,6 +39,7 @@
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
+		"@turf/boolean-point-in-polygon": "^7.3.5",
 		"chart.js": "^4.5.1",
 		"firebase": "^12.10.0"
 	}

@@ -28,6 +28,13 @@
   // QR Display
   let generatedHousehold: Household | null = null;
   let qrDataUrl = '';
+  
+  // Print modal
+  let showPrintModal = false;
+  let printContent = '';
+  
+  // Download state
+  let downloading = false;
 
   let unsubs: (() => void)[] = [];
 
@@ -145,68 +152,196 @@
     generatedHousehold = { ...hh, registrationUrl };
   }
 
+  // Fixed: Auto-download that actually works instantly
+  async function handleDownload() {
+    if (!qrDataUrl || !generatedHousehold || downloading) return;
+    
+    downloading = true;
+    
+    try {
+      // Fetch the image as a blob
+      const response = await fetch(qrDataUrl);
+      const blob = await response.blob();
+      
+      // Create object URL and trigger download
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `${generatedHousehold.qrId}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // Clean up the object URL
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    } catch (error) {
+      console.error('Download failed:', error);
+      errorMsg = 'Failed to download QR code. Please try again.';
+      setTimeout(() => { if (errorMsg === 'Failed to download QR code. Please try again.') errorMsg = ''; }, 3000);
+    } finally {
+      downloading = false;
+    }
+  }
+
+  // Print modal instead of new window
   function handlePrint() {
     if (!generatedHousehold) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html><html><head><title>QR Code - ${generatedHousehold.qrId}</title>
-      <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: white; }
-        .card { border: 2px solid #0f2060; border-radius: 16px; padding: 28px 24px; max-width: 320px; text-align: center; }
-        .logo { font-size: 22px; font-weight: 900; color: #0f2060; margin-bottom: 2px; }
-        .subtitle { font-size: 11px; color: #64748b; margin-bottom: 16px; }
-        .qr { width: 220px; height: 220px; margin: 0 auto 16px; display: block; }
-        .qr-id { font-size: 15px; font-weight: 700; color: #0f2060; margin-bottom: 6px; letter-spacing: 2px; }
-        .house { font-size: 13px; color: #334155; font-weight: 600; margin-bottom: 2px; }
-        .street { font-size: 12px; color: #334155; font-weight: 600; margin-bottom: 4px; }
-        .divider { border: none; border-top: 1px solid #e2e8f0; margin: 12px 0; }
-        .instruction-title { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 4px; }
-        .instruction { font-size: 10px; color: #64748b; line-height: 1.5; }
-        .brgy { font-size: 11px; color: #2563eb; font-weight: 600; margin-top: 8px; }
-        .vercel-badge { font-size: 8px; color: #94a3b8; margin-top: 12px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-      </style></head><body>
-      <div class="card">
-        <div class="logo">📍 GeoProfile</div>
-        <div class="subtitle">Barangay Pag-Asa · Resident Profiling System</div>
-        <img class="qr" src="${qrDataUrl}" alt="QR Code" />
-        <div class="qr-id">${generatedHousehold.qrId}</div>
-        <div class="house">House No. ${generatedHousehold.houseNo}</div>
-        <div class="street">Barangay Pag-Asa</div>
-        <hr class="divider" />
-        <div class="instruction-title">HOW TO REGISTER:</div>
-        <div class="instruction">
-          1. Open your phone camera<br/>
-          2. Scan this QR code<br/>
-          3. Fill out your personal information<br/>
-          4. Provide your street address<br/>
-          5. Take a photo of your house<br/>
-          6. Submit the form
-        </div>
-        <div class="brgy">Olongapo City, Zambales</div>
-        <div class="vercel-badge">Permanent QR Code · Live 24/7</div>
-      </div></body></html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    
+    // Generate print content
+    printContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>QR Code - ${generatedHousehold.qrId}</title>
+          <meta charset="UTF-8">
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              font-family: Arial, sans-serif;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              margin: 0;
+              background: white;
+              padding: 20px;
+            }
+            .card {
+              border: 2px solid #0f2060;
+              border-radius: 16px;
+              padding: 28px 24px;
+              max-width: 320px;
+              text-align: center;
+              background: white;
+            }
+            .logo {
+              font-size: 22px;
+              font-weight: 900;
+              color: #0f2060;
+              margin-bottom: 2px;
+            }
+            .subtitle {
+              font-size: 11px;
+              color: #64748b;
+              margin-bottom: 16px;
+            }
+            .qr {
+              width: 220px;
+              height: 220px;
+              margin: 0 auto 16px;
+              display: block;
+            }
+            .qr-id {
+              font-size: 15px;
+              font-weight: 700;
+              color: #0f2060;
+              margin-bottom: 6px;
+              letter-spacing: 2px;
+            }
+            .house {
+              font-size: 13px;
+              color: #334155;
+              font-weight: 600;
+              margin-bottom: 2px;
+            }
+            .street {
+              font-size: 12px;
+              color: #334155;
+              font-weight: 600;
+              margin-bottom: 4px;
+            }
+            .divider {
+              border: none;
+              border-top: 1px solid #e2e8f0;
+              margin: 12px 0;
+            }
+            .instruction-title {
+              font-size: 11px;
+              font-weight: 700;
+              color: #334155;
+              margin-bottom: 4px;
+            }
+            .instruction {
+              font-size: 10px;
+              color: #64748b;
+              line-height: 1.5;
+            }
+            .brgy {
+              font-size: 11px;
+              color: #2563eb;
+              font-weight: 600;
+              margin-top: 8px;
+            }
+            .vercel-badge {
+              font-size: 8px;
+              color: #94a3b8;
+              margin-top: 12px;
+              border-top: 1px solid #e2e8f0;
+              padding-top: 8px;
+            }
+            @media print {
+              body {
+                padding: 0;
+                margin: 0;
+              }
+              .card {
+                border: 2px solid #0f2060;
+                page-break-inside: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="logo">📍 GeoProfile</div>
+            <div class="subtitle">Barangay Pag-Asa · Resident Profiling System</div>
+            <img class="qr" src="${qrDataUrl}" alt="QR Code" />
+            <div class="qr-id">${generatedHousehold.qrId}</div>
+            <div class="house">House No. ${generatedHousehold.houseNo}</div>
+            <div class="street">Barangay Pag-Asa</div>
+            <hr class="divider" />
+            <div class="instruction-title">HOW TO REGISTER:</div>
+            <div class="instruction">
+              1. Open your phone camera<br/>
+              2. Scan this QR code<br/>
+              3. Fill out your personal information<br/>
+              4. Provide your street address<br/>
+              5. Take a photo of your house<br/>
+              6. Submit the form
+            </div>
+            <div class="brgy">Olongapo City, Zambales</div>
+            <div class="vercel-badge">Permanent QR Code · Live 24/7</div>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    showPrintModal = true;
   }
 
-  function handleDownload() {
-    if (!qrDataUrl || !generatedHousehold) return;
-    const a = document.createElement('a');
-    a.href = qrDataUrl;
-    a.download = `${generatedHousehold.qrId}.png`;
-    a.click();
-  }
-
-  // NEW: Copy registration link to clipboard
-  async function handleCopyLink() {
-    if (!generatedHousehold?.registrationUrl) return;
-    try {
-      await navigator.clipboard.writeText(generatedHousehold.registrationUrl);
-      alert('Registration link copied to clipboard!');
-    } catch (err) {
-      console.error('Failed to copy:', err);
+  // Execute print from modal
+  function executePrint() {
+    const printFrame = document.getElementById('print-frame') as HTMLIFrameElement;
+    if (printFrame) {
+      const doc = printFrame.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(printContent);
+        doc.close();
+        
+        // Wait for content to load then print
+        printFrame.onload = () => {
+          printFrame.contentWindow?.print();
+          // Close modal after print dialog is closed
+          setTimeout(() => {
+            showPrintModal = false;
+          }, 100);
+        };
+      }
     }
   }
 </script>
@@ -216,13 +351,6 @@
   <div>
     <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Generate QR Code</h1>
     <p class="text-sm text-slate-500 mt-0.5">Create a household registration QR for Barangay Pag-Asa</p>
-    <!-- NEW: Deployment badge -->
-    <div class="flex items-center gap-2 mt-2">
-      <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[0.65rem] font-semibold">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-        Live on Vercel · Permanent URL
-      </span>
-    </div>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -312,21 +440,6 @@
                 </p>
               {/if}
             </div>
-            
-            <!-- NEW: Show registration link and copy button -->
-            <div class="w-full bg-slate-50 rounded-xl px-3 py-2.5 border border-slate-200">
-              <p class="text-[0.62rem] font-bold text-slate-400 uppercase tracking-widest mb-1">Registration Link (Permanent)</p>
-              <div class="flex items-center gap-2">
-                <p class="text-xs text-blue-600 font-medium break-all flex-1">{generatedHousehold.registrationUrl}</p>
-                <button type="button" on:click={handleCopyLink}
-                  class="p-1.5 rounded-lg bg-white border border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-all shrink-0"
-                  title="Copy link">
-                  <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
 
             <div class="flex gap-3 w-full">
               <button type="button" on:click={handlePrint}
@@ -337,20 +450,21 @@
                 </svg>
                 Print
               </button>
-              <button type="button" on:click={handleDownload}
-                class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                </svg>
-                Download
+              <button type="button" on:click={handleDownload} disabled={downloading}
+                class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                {#if downloading}
+                  <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                  </svg>
+                  Downloading...
+                {:else}
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  Download
+                {/if}
               </button>
-            </div>
-
-            <!-- NEW: Info about permanent QR -->
-            <div class="w-full bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-              <p class="text-[0.65rem] text-emerald-700 text-center font-semibold">
-                ✅ This QR code uses a permanent Vercel URL. No expiration date.
-              </p>
             </div>
           </div>
         {:else}
@@ -396,3 +510,40 @@
     </div>
   </div>
 </div>
+
+<!-- Print Modal -->
+{#if showPrintModal}
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" on:click={() => showPrintModal = false}>
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col" on:click|stopPropagation>
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+        <h3 class="font-nunito font-extrabold text-slate-800">Print Preview</h3>
+        <button type="button" on:click={() => showPrintModal = false} class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="flex-1 overflow-auto p-6 bg-slate-100">
+        <div class="bg-white rounded-xl shadow-lg mx-auto" style="max-width: 360px;">
+          <iframe id="print-frame" class="w-full h-[600px] border-0" srcdoc={printContent}></iframe>
+        </div>
+      </div>
+      
+      <div class="flex gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+        <button type="button" on:click={() => showPrintModal = false}
+          class="flex-1 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-all">
+          Cancel
+        </button>
+        <button type="button" on:click={executePrint}
+          class="flex-1 px-4 py-2 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
+          style="background:#2563eb;">
+          <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+          </svg>
+          Print
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
