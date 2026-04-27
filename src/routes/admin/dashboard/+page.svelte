@@ -1,43 +1,62 @@
 <!-- src/routes/admin/dashboard/+page.svelte -->
-<script>
+<script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import Chart from 'chart.js/auto';
+  import type { Chart as ChartType, TooltipItem } from 'chart.js';
+
+  type FirestoreTimestamp = { toDate: () => Date; };
+  type Resident = {
+    id: string;
+    birthdate?: string | Date | FirestoreTimestamp;
+    civilStatus?: string;
+    sex?: string;
+    gender?: string;
+    submittedAt?: string | number | Date | FirestoreTimestamp;
+    isSenior?: boolean;
+    isPWD?: boolean;
+    isSingleParent?: boolean;
+    status?: string;
+    name?: string;
+    firstName?: string;
+  };
 
   // ── Stats ──────────────────────────────────────────────
-  let totalResidents  = 0;
-  let seniorCitizens  = 0;
-  let pwds            = 0;
-  let singleParents   = 0;
-  let pendingCount    = 0;
-  let declinedCount   = 0;
+  let totalResidents: number = 0;
+  let seniorCitizens: number = 0;
+  let pwds: number = 0;
+  let singleParents: number = 0;
+  let pendingCount: number = 0;
+  let declinedCount: number = 0;
 
   // ── Age groups (computed from birthdate) ──────────────
-  let ageGroups = { child: 0, youth: 0, adult: 0, middleAge: 0, senior: 0 };
+  let ageGroups: { child: number; youth: number; adult: number; middleAge: number; senior: number } = { 
+    child: 0, youth: 0, adult: 0, middleAge: 0, senior: 0 
+  };
 
   // ── Civil status ──────────────────────────────────────
-  let civilStatusMap = /** @type {Record<string, number>} */ ({});
+  let civilStatusMap: Record<string, number> = {};
 
   // ── Gender ────────────────────────────────────────────
-  let genderMap = /** @type {Record<string, number>} */ ({});
+  let genderMap: Record<string, number> = {};
 
   // ── Monthly registrations (last 6 months) ────────────
-  /** @type {string[]} */ let monthLabels   = [];
-  /** @type {number[]} */ let monthlyTotals = [];
+  let monthLabels: string[] = [];
+  let monthlyTotals: number[] = [];
 
   // ── All approved residents ─────────────────────────────
-  /** @type {any[]} */ let allResidents = [];
+  let allResidents: Resident[] = [];
 
   // ── Recent activity (last 8 status changes) ───────────
-  /** @type {any[]} */ let recentActivity = [];
+  let recentActivity: Resident[] = [];
 
-  let loading   = true;
-  let loadError = '';
+  let loading: boolean = true;
+  let loadError: string = '';
 
-  /** @type {(() => void)[]} */ let unsubs = [];
+  let unsubs: (() => void)[] = [];
 
   // ── Charts ────────────────────────────────────────────
-  /** @type {Chart|null} */ let regChart    = null;
-  /** @type {Chart|null} */ let genderChart = null;
+  let regChart: ChartType | null = null;
+  let genderChart: ChartType | null = null;
 
   // ── Month helpers ─────────────────────────────────────
   function getLast6Months() {
@@ -48,28 +67,32 @@
     });
   }
 
-  /** @param {Date} birthdate */
-  function getAgeGroup(birthdate) {
+  function getAgeGroup(birthdate: Date) {
     const age = Math.floor((Date.now() - birthdate.getTime()) / (365.25 * 24 * 3600 * 1000));
-    if (age < 13)  return 'child';
-    if (age < 18)  return 'youth';
-    if (age < 36)  return 'adult';
-    if (age < 60)  return 'middleAge';
+    if (age < 13) return 'child';
+    if (age < 18) return 'youth';
+    if (age < 36) return 'adult';
+    if (age < 60) return 'middleAge';
     return 'senior';
   }
 
-  /** @param {any[]} residents */
-  function computeDerived(residents) {
+  function isFirestoreTimestamp(value: unknown): value is FirestoreTimestamp {
+    return typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function';
+  }
+
+  function computeDerived(residents: Resident[]) {
     const ag = { child: 0, youth: 0, adult: 0, middleAge: 0, senior: 0 };
-    const cs = /** @type {Record<string, number>} */ ({});
-    const gm = /** @type {Record<string, number>} */ ({});
+    const cs: Record<string, number> = {};
+    const gm: Record<string, number> = {};
     const months = getLast6Months();
     const mc = new Array(6).fill(0);
 
     for (const r of residents) {
       if (r.birthdate) {
-        const bd = new Date(r.birthdate);
-        if (!isNaN(bd.getTime())) ag[getAgeGroup(bd)]++;
+        const bd = isFirestoreTimestamp(r.birthdate)
+          ? r.birthdate.toDate()
+          : new Date(r.birthdate);
+        if (!isNaN(bd.getTime())) ag[getAgeGroup(bd) as keyof typeof ag]++;
       }
       if (r.civilStatus) {
         const key = r.civilStatus.toLowerCase();
@@ -80,18 +103,19 @@
         const key = sexVal.toLowerCase();
         gm[key] = (gm[key] ?? 0) + 1;
       }
-      const ts = r.submittedAt?.toDate ? r.submittedAt.toDate() : (r.submittedAt ? new Date(r.submittedAt) : null);
+      const submittedAt = r.submittedAt;
+      const ts = isFirestoreTimestamp(submittedAt) ? submittedAt.toDate() : (submittedAt ? new Date(submittedAt) : null);
       if (ts) {
         const idx = months.findIndex(m => m.year === ts.getFullYear() && m.month === ts.getMonth());
         if (idx !== -1) mc[idx]++;
       }
     }
 
-    ageGroups      = ag;
+    ageGroups = ag;
     civilStatusMap = cs;
-    genderMap      = gm;
-    monthLabels    = months.map(m => m.label);
-    monthlyTotals  = mc;
+    genderMap = gm;
+    monthLabels = months.map(m => m.label);
+    monthlyTotals = mc;
 
     updateRegChart();
     updateGenderChart();
@@ -106,10 +130,10 @@
 
   function updateGenderChart() {
     if (!genderChart) return;
-    const male   = (genderMap['male']   ?? 0) + (genderMap['Male']   ?? 0);
+    const male = (genderMap['male'] ?? 0) + (genderMap['Male'] ?? 0);
     const female = (genderMap['female'] ?? 0) + (genderMap['Female'] ?? 0);
-    const other  = Object.entries(genderMap)
-      .filter(([k]) => !['male','female','Male','Female'].includes(k))
+    const other = Object.entries(genderMap)
+      .filter(([k]) => !['male', 'female', 'Male', 'Female'].includes(k))
       .reduce((a, [, v]) => a + v, 0);
     genderChart.data.datasets[0].data = [male, female, other];
     genderChart.update();
@@ -118,11 +142,11 @@
   async function initCharts() {
     await tick();
     const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const gridC  = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-    const txtC   = '#888780';
+    const gridC = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const txtC = '#888780';
 
-    const regCtx    = /** @type {HTMLCanvasElement|null} */ (document.getElementById('regChart'));
-    const genderCtx = /** @type {HTMLCanvasElement|null} */ (document.getElementById('genderChart'));
+    const regCtx = document.getElementById('regChart') as HTMLCanvasElement | null;
+    const genderCtx = document.getElementById('genderChart') as HTMLCanvasElement | null;
 
     if (regCtx && !regChart) {
       regChart = new Chart(regCtx, {
@@ -165,7 +189,7 @@
           cutout: '70%',
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (/** @type {any} */ c) => {
+            tooltip: { callbacks: { label: (c: TooltipItem<'doughnut'>) => {
               const labels = ['Male', 'Female', 'Other / N/A'];
               return ` ${labels[c.dataIndex]}: ${c.parsed.toLocaleString()}`;
             }}}
@@ -179,19 +203,19 @@
   }
 
   onMount(async () => {
-    monthLabels   = getLast6Months().map(m => m.label);
+    monthLabels = getLast6Months().map(m => m.label);
     monthlyTotals = new Array(6).fill(0);
 
     try {
       const { auth } = await import('$lib/firebase');
-      const { db }   = await import('$lib/firebase');
-      const { onAuthStateChanged }  = await import('firebase/auth');
+      const { db } = await import('$lib/firebase');
+      const { onAuthStateChanged } = await import('firebase/auth');
       const {
         collection, query, where, orderBy,
         onSnapshot, limit, doc, getDoc
       } = await import('firebase/firestore');
 
-      const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      const unsubAuth = onAuthStateChanged(auth, async (user: { uid: string } | null) => {
         if (!user) { window.location.href = '/'; return; }
 
         try {
@@ -205,20 +229,20 @@
         // Approved residents
         unsubs.push(onSnapshot(
           query(collection(db, 'residents'), where('status', '==', 'approved')),
-          async snap => {
-            allResidents   = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          async (snap) => {
+            allResidents = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
             totalResidents = snap.size;
-            seniorCitizens = allResidents.filter(r => r.isSenior).length;
-            pwds           = allResidents.filter(r => r.isPWD).length;
-            singleParents  = allResidents.filter(r => r.isSingleParent).length;
+            seniorCitizens = allResidents.filter((r) => r.isSenior).length;
+            pwds = allResidents.filter((r) => r.isPWD).length;
+            singleParents = allResidents.filter((r) => r.isSingleParent).length;
             const wasLoading = loading;
             loading = false;
             if (wasLoading) await initCharts();
             computeDerived(allResidents);
           },
-          err => {
+          (err) => {
             loadError = 'Could not load residents. Check Firestore rules.';
-            loading   = false;
+            loading = false;
             console.error('residents error:', err);
           }
         ));
@@ -226,26 +250,26 @@
         // Pending count
         unsubs.push(onSnapshot(
           query(collection(db, 'residents'), where('status', '==', 'pending')),
-          async snap => { pendingCount = snap.size; }
+          async (snap) => { pendingCount = snap.size; }
         ));
 
         // Declined count
         unsubs.push(onSnapshot(
           query(collection(db, 'residents'), where('status', '==', 'declined')),
-          async snap => { declinedCount = snap.size; }
+          async (snap) => { declinedCount = snap.size; }
         ));
 
         // Recent activity feed
         unsubs.push(onSnapshot(
           query(collection(db, 'residents'), orderBy('submittedAt', 'desc'), limit(8)),
-          async snap => { recentActivity = snap.docs.map(d => ({ id: d.id, ...d.data() })); }
+          async (snap) => { recentActivity = snap.docs.map((d) => ({ id: d.id, ...d.data() })); }
         ));
       });
 
       unsubs.push(unsubAuth);
     } catch (e) {
       loadError = 'Firebase connection failed. Check your .env config.';
-      loading   = false;
+      loading = false;
       console.error(e);
     }
   });
@@ -257,52 +281,51 @@
   });
 
   // ── Derived ────────────────────────────────────────────
-  $: totalAll    = totalResidents + pendingCount + declinedCount;
+  $: totalAll = totalResidents + pendingCount + declinedCount;
   $: approvalPct = totalAll > 0 ? Math.round((totalResidents / totalAll) * 100) : 0;
 
-  $: maxAge   = Math.max(1, ...Object.values(ageGroups));
+  $: maxAge = Math.max(1, ...Object.values(ageGroups));
   $: maxCivil = Math.max(1, ...Object.values(civilStatusMap));
 
-  $: genderMale   = (genderMap['male']   ?? 0) + (genderMap['Male']   ?? 0);
+  $: genderMale = (genderMap['male'] ?? 0) + (genderMap['Male'] ?? 0);
   $: genderFemale = (genderMap['female'] ?? 0) + (genderMap['Female'] ?? 0);
-  $: genderOther  = totalResidents - genderMale - genderFemale;
+  $: genderOther = totalResidents - genderMale - genderFemale;
 
-  const ageLabels = /** @type {Record<string, string>} */ ({
+  const ageLabels: Record<string, string> = {
     child: '0–12 yrs', youth: '13–17 yrs', adult: '18–35 yrs',
     middleAge: '36–59 yrs', senior: '60+ yrs',
-  });
-  const ageColors = /** @type {Record<string, string>} */ ({
+  };
+  const ageColors: Record<string, string> = {
     child: '#2563eb', youth: '#7c3aed', adult: '#059669',
     middleAge: '#d97706', senior: '#dc2626',
-  });
-  const civilLabels = /** @type {Record<string, string>} */ ({
+  };
+  const civilLabels: Record<string, string> = {
     single: 'Single', married: 'Married', widowed: 'Widowed',
     separated: 'Separated', annulled: 'Annulled',
-  });
+  };
 
-  /** @param {any} ts */
-  function formatTime(ts) {
+  function formatTime(ts: Resident['submittedAt'] | undefined) {
     if (!ts) return '—';
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    if (isFirestoreTimestamp(ts)) {
+      return ts.toDate().toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    }
+    const d = new Date(ts);
     return d.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
 
-  /** @param {string} status */
-  function activityDotColor(status) {
+  function activityDotColor(status: string) {
     if (status === 'approved') return '#059669';
     if (status === 'declined') return '#dc2626';
     return '#d97706';
   }
 
-  /** @param {string} status */
-  function activityLabel(status) {
+  function activityLabel(status: string) {
     if (status === 'approved') return 'Approved';
     if (status === 'declined') return 'Declined';
     return 'Pending review';
   }
 
-  /** @param {any} r */
-  function displayName(r) {
+  function displayName(r: Resident) {
     if (r.name) return r.name;
     if (r.firstName) return r.firstName;
     return 'Unknown';

@@ -56,7 +56,6 @@
 
   const streets  = ['All Streets', 'Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
   const statuses = ['All Status',  'Pending', 'Approved', 'Declined'];
-  const sectors  = ['All Sectors', 'Zone 1', 'Zone 2', 'Zone 3', 'Zone 4'];
 
   onMount(async () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -171,7 +170,7 @@
     </div>
     <!-- Made the select wider with min-width -->
     <select bind:value={filterStatus}
-      class="text-sm border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer min-w-[130px]">
+      class="text-sm border border-slate-200 rounded-xl px-4 py-2.5 bg-white text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all shadow-sm cursor-pointer min-w-32">
       {#each statuses as s (s)}<option>{s}</option>{/each}
     </select>
     <!-- REMOVED: Sector dropdown and Export button -->

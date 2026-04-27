@@ -109,7 +109,7 @@
 </script>
 
 <!-- Backdrop - REMOVED the on:click handler -->
-<div class="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+<div class="fixed inset-0 z-'80' flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" on:click|stopPropagation>
     
     <!-- Header -->
