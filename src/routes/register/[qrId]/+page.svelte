@@ -6,6 +6,11 @@
   import { page } from '$app/stores';
   import { isInsidePagAsa } from '$lib/pagasaBoundary.js';
 
+  // === DEMO BYPASS: Enable ?demo=true to bypass GPS outside
+  const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const DEMO_BYPASS = urlParams.get('demo') === 'true';
+  // ===========================================
+
   // ── QR / Household ─────────────────────────────────────
   $: qrId = $page.params.qrId;
 
@@ -726,9 +731,15 @@
 
         if (shouldFinalize) {
           stopGPS();
-          if (!isInsidePagAsa(newLat, newLng)) {
+          
+          // === DEMO BYPASS: Skip outside check if ?demo=true ===
+          if (!DEMO_BYPASS && !isInsidePagAsa(newLat, newLng)) {
             gpsStatus = 'outside';
             gpsMessage = '❌ You are outside Barangay Pag-Asa.';
+          } else if (DEMO_BYPASS && !isInsidePagAsa(newLat, newLng)) {
+            // Demo mode: warn but allow
+            gpsStatus = 'granted';
+            gpsMessage = `⚠️ DEMO MODE: Location outside Pag-Asa (bypass active). Accuracy: ±${newAccuracy}m`;
           } else {
             gpsStatus = 'granted';
             if (newAccuracy <= 15) {
@@ -868,7 +879,8 @@
     errorMsg = '';
     
     if (step === 1) {
-      if (gpsStatus === 'outside') {
+      // === DEMO BYPASS: Skip outside check if ?demo=true ===
+      if (!DEMO_BYPASS && gpsStatus === 'outside') {
         errorMsg = '❌ You must be inside Barangay Pag-Asa to register.';
         scrollToFirstError();
         return;
@@ -910,7 +922,8 @@
       return;
     }
 
-    if (!isInsidePagAsa(gpsLat, gpsLng)) {
+    // === DEMO BYPASS: Skip location restriction if ?demo=true ===
+    if (!DEMO_BYPASS && !isInsidePagAsa(gpsLat, gpsLng)) {
       errorMsg = '❌ Registration blocked. Your current location is outside Barangay Pag-Asa, Olongapo City.';
       return;
     }
@@ -1025,7 +1038,10 @@
     </div>
     <div class="ml-auto flex flex-col items-end gap-0.5">
       <div class="flex items-center gap-1.5">
-        {#if gpsStatus === 'granted'}
+        {#if DEMO_BYPASS}
+          <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+          <span class="text-yellow-200 text-[0.65rem] font-semibold">⚠️ DEMO MODE</span>
+        {:else if gpsStatus === 'granted'}
           <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
           <span class="text-white/70 text-[0.65rem] font-semibold">GPS ✓</span>
         {:else if gpsStatus === 'outside'}
@@ -1072,8 +1088,8 @@
       <p class="text-sm text-slate-500">{householdError}</p>
     </div>
 
-  <!-- ══ OUTSIDE PAGASA — HARD BLOCK ══ -->
-  {:else if gpsStatus === 'outside'}
+  <!-- ══ OUTSIDE PAGASA — HARD BLOCK (unless DEMO_BYPASS is active) ══ -->
+  {:else if !DEMO_BYPASS && gpsStatus === 'outside'}
     <div class="p-6 flex flex-col items-center text-center mt-8">
       <div class="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-5">
         <svg class="w-10 h-10 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1103,6 +1119,19 @@
       <p class="text-xs text-slate-400 mt-4 max-w-xs">
         Tip: Go outdoors, away from tall buildings, and wait a moment before retrying.
       </p>
+    </div>
+
+  <!-- DEMO MODE WARNING BANNER (only when bypass is active) -->
+  {:else if DEMO_BYPASS && gpsStatus !== 'denied' && gpsStatus !== 'error'}
+    <div class="mx-4 mt-4">
+      <div class="flex items-center gap-2 bg-yellow-100 border border-yellow-300 rounded-xl px-4 py-3">
+        <svg class="w-5 h-5 text-yellow-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        <p class="text-xs text-yellow-700">
+          <strong>⚠️ DEMO MODE ACTIVE</strong> — Location restriction is bypassed for testing. Remove <code class="bg-yellow-200 px-1 rounded">?demo=true</code> from URL to restore.
+        </p>
+      </div>
     </div>
 
   <!-- Success screen -->
@@ -1183,21 +1212,21 @@
         </div>
       {:else if gpsStatus === 'granted'}
         <div class="flex items-start gap-2.5 rounded-xl px-4 py-3
-          {gpsAccuracy !== null && gpsAccuracy > 50
+          {gpsAccuracy !== null && gpsAccuracy > 50 && !DEMO_BYPASS
             ? 'bg-amber-50 border border-amber-200'
             : 'bg-green-50 border border-green-200'}">
           <svg class="w-4 h-4 mt-0.5 shrink-0
-            {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-500' : 'text-green-500'}"
+            {gpsAccuracy !== null && gpsAccuracy > 50 && !DEMO_BYPASS ? 'text-amber-500' : 'text-green-500'}"
             fill="currentColor" viewBox="0 0 24 24">
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
           </svg>
           <div class="flex-1">
             <p class="text-xs font-bold
-              {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-700' : 'text-green-700'}">
+              {gpsAccuracy !== null && gpsAccuracy > 50 && !DEMO_BYPASS ? 'text-amber-700' : 'text-green-700'}">
               {gpsMessage}
             </p>
             <p class="text-xs mt-0.5
-              {gpsAccuracy !== null && gpsAccuracy > 50 ? 'text-amber-600' : 'text-green-600'}">
+              {gpsAccuracy !== null && gpsAccuracy > 50 && !DEMO_BYPASS ? 'text-amber-600' : 'text-green-600'}">
               {accuracyQuality}
             </p>
           </div>
@@ -1854,7 +1883,7 @@
 
         {#if step < 3}
           <button type="button" on:click={nextStep}
-            disabled={step === 1 && (gpsStatus === 'outside' || gpsLat === null)}
+            disabled={step === 1 && !DEMO_BYPASS && (gpsStatus === 'outside' || gpsLat === null)}
             class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style="background: #0f2060;">
             Next →
