@@ -729,25 +729,28 @@
 
         const shouldFinalize = newAccuracy <= 15 || (newAccuracy <= 30 && gpsAttempt >= 2) || gpsAttempt >= maxGpsRetries;
 
-        if (shouldFinalize) {
-          stopGPS();
-          
-          // === DEMO BYPASS: Skip outside check if ?demo=true ===
-          if (!DEMO_BYPASS && !isInsidePagAsa(newLat, newLng)) {
-            gpsStatus = 'outside';
-            gpsMessage = '❌ You are outside Barangay Pag-Asa.';
-          } else if (DEMO_BYPASS && !isInsidePagAsa(newLat, newLng)) {
-            // Demo mode: warn but allow
-            gpsStatus = 'granted';
-            gpsMessage = `⚠️ DEMO MODE: Location outside Pag-Asa (bypass active). Accuracy: ±${newAccuracy}m`;
-          } else {
-            gpsStatus = 'granted';
-            if (newAccuracy <= 15) {
-              gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
-            } else {
-              gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
-            }
-          }
+if (shouldFinalize) {
+  stopGPS();
+  
+  // === DEMO BYPASS: COMPLETELY SKIP outside check if ?demo=true ===
+  if (DEMO_BYPASS) {
+    // In demo mode, ALWAYS set to granted regardless of location
+    gpsStatus = 'granted';
+    gpsMessage = `⚠️ DEMO MODE: Location check bypassed. Accuracy: ±${newAccuracy}m`;
+  } else if (!isInsidePagAsa(newLat, newLng)) {
+    // Normal mode: block if outside
+    gpsStatus = 'outside';
+    gpsMessage = '❌ You are outside Barangay Pag-Asa.';
+  } else {
+    // Normal mode: inside
+    gpsStatus = 'granted';
+    if (newAccuracy <= 15) {
+      gpsMessage = `📍 Excellent! Location confirmed (±${newAccuracy}m accuracy)`;
+    } else {
+      gpsMessage = `✓ Location acquired (±${newAccuracy}m accuracy)`;
+    }
+  }
+
         } else {
           gpsStatus = 'optimizing';
           const remainingRetries = maxGpsRetries - gpsAttempt;
