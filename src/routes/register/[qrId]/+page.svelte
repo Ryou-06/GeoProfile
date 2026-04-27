@@ -1042,8 +1042,8 @@ if (shouldFinalize) {
     <div class="ml-auto flex flex-col items-end gap-0.5">
       <div class="flex items-center gap-1.5">
         {#if DEMO_BYPASS}
-          <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
-          <span class="text-yellow-200 text-[0.65rem] font-semibold">⚠️ DEMO MODE</span>
+          <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+          <span class="text-white/70 text-[0.65rem] font-semibold">GPS ✓</span>
         {:else if gpsStatus === 'granted'}
           <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
           <span class="text-white/70 text-[0.65rem] font-semibold">GPS ✓</span>
@@ -1125,7 +1125,7 @@ if (shouldFinalize) {
     </div>
 
   <!-- DEMO MODE WARNING BANNER (only when bypass is active) -->
-  {:else if DEMO_BYPASS && gpsStatus !== 'denied' && gpsStatus !== 'error'}
+  <!-- {:else if DEMO_BYPASS && gpsStatus !== 'denied' && gpsStatus !== 'error'}
     <div class="mx-4 mt-4">
       <div class="flex items-center gap-2 bg-yellow-100 border border-yellow-300 rounded-xl px-4 py-3">
         <svg class="w-5 h-5 text-yellow-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1135,7 +1135,7 @@ if (shouldFinalize) {
           <strong>⚠️ DEMO MODE ACTIVE</strong> — Location restriction is bypassed for testing. Remove <code class="bg-yellow-200 px-1 rounded">?demo=true</code> from URL to restore.
         </p>
       </div>
-    </div>
+    </div> -->
 
   <!-- Success screen -->
   {:else if submitted}
