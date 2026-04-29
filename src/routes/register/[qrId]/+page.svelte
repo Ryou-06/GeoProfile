@@ -217,6 +217,27 @@
     }
   }
 
+  function refreshPerson(person: PersonProfile | FamilyMember) {
+    if ('id' in person) {
+      members = members.map((member) => (member.id === person.id ? { ...person } as FamilyMember : member));
+    } else if (person === father) {
+      father = { ...father };
+    } else if (person === mother) {
+      mother = { ...mother };
+    }
+  }
+
+  function handlePwdToggle(event: Event, person: PersonProfile | FamilyMember) {
+    const input = event.target as HTMLInputElement;
+    person.isPWD = input.checked;
+    if (!person.isPWD) {
+      person.pwdType = '';
+      person.pwdProof = null;
+      person.pwdProofPreview = '';
+    }
+    refreshPerson(person);
+  }
+
   function toggleUtility(value: string) {
     residentialInfo.utilities = residentialInfo.utilities.includes(value)
       ? residentialInfo.utilities.filter((item) => item !== value)
@@ -359,10 +380,16 @@
     }
     if (field === 'pwd') {
       person.pwdProof = file;
-      fileToPreview(file, (preview) => (person.pwdProofPreview = preview));
+      fileToPreview(file, (preview) => {
+        person.pwdProofPreview = preview;
+        refreshPerson(person);
+      });
     } else {
       person.seniorProof = file;
-      fileToPreview(file, (preview) => (person.seniorProofPreview = preview));
+      fileToPreview(file, (preview) => {
+        person.seniorProofPreview = preview;
+        refreshPerson(person);
+      });
     }
     errorMsg = '';
   }
@@ -472,11 +499,12 @@
       if (isSingleParentHousehold && !singleParentProof) return 'Solo parent/guardian proof is required.';
     }
 
-    if (step === 4 && householdType === 'residential') {
+    if (step === 4 && (householdType === 'residential' || householdType === 'boarding')) {
       for (let i = 0; i < members.length; i++) {
-        const memberError = personIsValid(members[i], `Family member ${i + 1}`);
+        const personLabel = householdType === 'boarding' ? `Tenant/boarder ${i + 1}` : `Family member ${i + 1}`;
+        const memberError = personIsValid(members[i], personLabel);
         if (memberError) return memberError;
-        if (!members[i].relationship.trim()) return `Family member ${i + 1}: relationship is required.`;
+        if (!members[i].relationship.trim()) return `${personLabel}: relationship/room is required.`;
       }
     }
 
@@ -590,6 +618,7 @@
           mother: motherStatus === 'present' ? { ...serializePerson(mother), status: motherStatus, proofs: motherProofs } : { status: motherStatus }
         },
         familyMembers: memberProfiles,
+        occupantRecords: householdType === 'boarding' ? memberProfiles : [],
         memberCount: members.length,
         singleParent: isSingleParentHousehold,
         singleParentProof: isSingleParentHousehold ? await readFileAsBase64(singleParentProof) : null,
@@ -857,14 +886,18 @@
         </section>
       {:else if step === 4}
         <section class="panel">
-          <div><p class="eyebrow">Part 4</p><h2 class="title">Family Members</h2><p class="sub">Type a count and fields will be added automatically.</p></div>
-          {#if householdType !== 'residential'}
-            <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">This profile type does not require family member records. Continue to the photo capture.</div>
+          <div>
+            <p class="eyebrow">Part 4</p>
+            <h2 class="title">{householdType === 'boarding' ? 'Tenants / Boarders' : 'Family Members'}</h2>
+            <p class="sub">{householdType === 'boarding' ? 'Add the people currently living in the rental, apartment, or boarding house.' : 'Type a count and fields will be added automatically.'}</p>
+          </div>
+          {#if householdType === 'business'}
+            <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">For business establishments, resident details are only needed if someone lives at this address. Use Residential or Boarding/Rental when profiling people who live here.</div>
           {:else}
-            <div><label class="label">Number of Family Members</label><input class="input" type="number" min="0" max="20" bind:value={memberCount} on:change={setMemberCount} /></div>
-            {#if members.length === 0}<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">No additional family members added.</div>{/if}
+            <div><label class="label">{householdType === 'boarding' ? 'Number of Tenants / Boarders' : 'Number of Family Members'}</label><input class="input" type="number" min="0" max="20" bind:value={memberCount} on:change={setMemberCount} /></div>
+            {#if members.length === 0}<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">{householdType === 'boarding' ? 'No tenants or boarders added yet.' : 'No additional family members added.'}</div>{/if}
             {#each members as member, index (member.id)}
-              {@render PersonFields(`Family Member ${index + 1}`, member, true)}
+              {@render PersonFields(householdType === 'boarding' ? `Tenant / Boarder ${index + 1}` : `Family Member ${index + 1}`, member, true)}
             {/each}
           {/if}
         </section>
@@ -959,14 +992,14 @@
                 </div>
               {/if}
             {:else if reviewPage === 4}
-              {#if householdType !== 'residential'}
-                <p class="text-sm text-slate-500">No family member records required for this profile type.</p>
+              {#if householdType === 'business'}
+                <p class="text-sm text-slate-500">No resident/member records were required for this business-only profile.</p>
               {:else if members.length === 0}
-                <p class="text-sm text-slate-500">No additional family members were added.</p>
+                <p class="text-sm text-slate-500">{householdType === 'boarding' ? 'No tenants or boarders were added.' : 'No additional family members were added.'}</p>
               {:else}
                 <div class="space-y-3">
                   {#each members as member, index (member.id)}
-                    {@render PersonReview(`Family Member ${index + 1} - ${member.relationship || 'Relationship not set'}`, member)}
+                    {@render PersonReview(`${householdType === 'boarding' ? 'Tenant / Boarder' : 'Family Member'} ${index + 1} - ${member.relationship || 'Relationship not set'}`, member)}
                   {/each}
                 </div>
               {/if}
@@ -1009,7 +1042,7 @@
       <div class="md:col-span-2"><label class="label">Medical Notes</label><input class="input" bind:value={person.medicalNotes} /></div>
     </div>
     <div class="grid md:grid-cols-2 gap-3">
-      <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer"><input type="checkbox" bind:checked={person.isPWD} class="mt-1" /><span><span class="block text-sm font-bold text-slate-700">PWD</span><span class="block text-xs text-slate-400">Requires type and proof.</span></span></label>
+      <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer"><input type="checkbox" checked={person.isPWD} on:change={(event) => handlePwdToggle(event, person)} class="mt-1" /><span><span class="block text-sm font-bold text-slate-700">PWD</span><span class="block text-xs text-slate-400">Requires sector/type and proof.</span></span></label>
       <div class="rounded-xl border p-3 {isSenior(person) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-100 opacity-70'}">
         <p class="text-sm font-bold {isSenior(person) ? 'text-emerald-700' : 'text-slate-500'}">Senior Citizen</p>
         <p class="text-xs {isSenior(person) ? 'text-emerald-600' : 'text-slate-400'}">{seniorStatusText(person)}</p>
@@ -1017,7 +1050,7 @@
     </div>
     {#if person.isPWD}
       <div class="space-y-3">
-        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select class="input" bind:value={person.pwdType}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
+        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select class="input" bind:value={person.pwdType} on:change={() => refreshPerson(person)}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
         {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
       </div>
     {/if}
@@ -1070,6 +1103,11 @@
   .choice { border:1px solid #e2e8f0; background:white; color:#64748b; border-radius:999px; padding:.55rem .75rem; font-size:.75rem; font-weight:700; }
   .choice-active { border-color:#059669; background:#d1fae5; color:#047857; }
   .upload { display:flex; align-items:center; justify-content:center; min-height:5rem; border:2px dashed #cbd5e1; border-radius:.75rem; background:white; color:#475569; font-size:.8rem; font-weight:800; cursor:pointer; }
+  .review-tabs { display:flex; gap:.5rem; overflow-x:auto; padding-bottom:.25rem; }
+  .review-tab { flex:0 0 auto; border:1px solid #e2e8f0; background:#f8fafc; color:#64748b; border-radius:999px; padding:.5rem .75rem; font-size:.72rem; font-weight:800; }
+  .review-tab-active { border-color:#2563eb; background:#dbeafe; color:#1d4ed8; }
+  .review-nav { border:1px solid #e2e8f0; background:#f8fafc; color:#475569; border-radius:.7rem; padding:.5rem .75rem; font-size:.75rem; font-weight:800; }
+  .review-nav:disabled { opacity:.4; cursor:not-allowed; }
   .review-grid { display:grid; grid-template-columns:repeat(1,minmax(0,1fr)); gap:.75rem; }
   @media (min-width:768px) { .review-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
