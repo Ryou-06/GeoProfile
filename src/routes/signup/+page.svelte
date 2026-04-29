@@ -171,7 +171,7 @@
       <img 
         src="/pagasa-logo.jpg" 
         alt="Barangay Pag-Asa Logo" 
-        class="w-16 h-16 object-contain bg-white/10 backdrop-blur-sm rounded-xl p-2 shadow-lg border border-white/20"
+        class="w-24 h-24 lg:w-28 lg:h-28 object-contain bg-white/15 backdrop-blur-sm rounded-2xl p-3 shadow-xl border border-white/25"
       />
     </div>
     
@@ -181,9 +181,11 @@
       <!-- Top - Title -->
       <div>
         <div class="flex items-center gap-3 mb-6">
-          <div class="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-2xl shadow-lg">
-            📍
-          </div>
+          <img 
+            src="/GeoProfileLogo.png" 
+            alt="GeoProfile Logo" 
+            class="w-14 h-14 object-contain rounded-2xl shadow-lg bg-white/15 backdrop-blur-sm border border-white/20 p-1"
+          />
           <div>
             <h1 class="font-nunito text-2xl font-black tracking-tight">
               <span class="font-light">Geo</span>Profile
@@ -208,7 +210,7 @@
           <div class="grid grid-cols-2 gap-4 mb-6">
             <div class="text-center">
               <div class="text-2xl font-bold">6,593</div>
-              <div class="text-xs text-white/70 mt-1">Population (2020)</div>
+              <div class="text-xs text-white/70 mt-1">Population (2026)</div>
             </div>
             <div class="text-center">
               <div class="text-2xl font-bold">126 km</div>
@@ -218,22 +220,14 @@
           
           <!-- Description -->
           <p class="text-sm text-white/90 leading-relaxed mb-4">
-            Pag-asa is a barangay in Olongapo City, situated on tidal flatland at the northeastern shore of Subic Bay, 
-            with the Zambales Mountains on three sides. The area is known for its proximity to the 
-            <span class="font-semibold">Subic Bay Freeport Zone</span> — once the largest American naval installation in Asia.
-          </p>
-          
-          <p class="text-sm text-white/90 leading-relaxed mb-4">
-            Today, the local economy thrives on commerce, manufacturing, logistics, tourism, and retail, 
-            driven by its adjacency to the Freeport Zone.
+            Pag-asa is a barangay in Olongapo City near Subic Bay, surrounded by the Zambales Mountains and close to the
+            <span class="font-semibold">Subic Bay Freeport Zone</span>.
           </p>
           
           <!-- Features -->
           <div class="flex flex-wrap gap-2 mt-4">
-            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">🏭 Manufacturing Hub</span>
-            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">🚢 Subic Bay Freeport</span>
-            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">🌴 Tropical Climate</span>
-            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">🏔️ Zambales Mountains</span>
+            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">Subic Bay Freeport</span>
+            <span class="text-xs bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">Zambales Mountains</span>
           </div>
         </div>
       </div> 
@@ -252,12 +246,19 @@
       
       <!-- Mobile Brand (visible only on mobile) - SAME AS LOGIN -->
       <div class="md:hidden text-center mb-8">
-        <div class="flex items-center justify-center gap-3 mb-2">
+        <div class="flex items-center justify-center gap-3 mb-3">
           <img 
             src="/pagasa-logo.jpg" 
             alt="Barangay Pag-Asa Logo" 
-            class="w-12 h-12 object-contain"
+            class="w-16 h-16 object-contain"
           />
+          <img 
+            src="/GeoProfileLogo.png" 
+            alt="GeoProfile Logo" 
+            class="w-14 h-14 object-contain rounded-2xl"
+          />
+        </div>
+        <div>
           <h1 class="font-nunito text-3xl font-black tracking-tight text-slate-800">
             <span class="font-light">Geo</span>Profile
           </h1>
