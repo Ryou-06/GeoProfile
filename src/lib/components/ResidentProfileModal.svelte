@@ -294,8 +294,22 @@
     if (!record) return [];
 
     const members: HouseholdMember[] = [];
+    const householdSingleParentProof = getProofValue(record, 'singleParent');
     const father = normalizeMember(record.parents?.father, 'Father / Head', members.length);
     const mother = normalizeMember(record.parents?.mother, 'Mother / Head', members.length);
+
+    if (record.singleParent || record.isSingleParent) {
+      if (father && record.parents?.father?.status === 'present') {
+        father.isSingleParent = true;
+        father.singleParentProof = father.singleParentProof || householdSingleParentProof;
+        father.singleParentIdProof = father.singleParentIdProof || householdSingleParentProof;
+      }
+      if (mother && record.parents?.mother?.status === 'present') {
+        mother.isSingleParent = true;
+        mother.singleParentProof = mother.singleParentProof || householdSingleParentProof;
+        mother.singleParentIdProof = mother.singleParentIdProof || householdSingleParentProof;
+      }
+    }
 
     if (father) members.push(father);
     if (mother) members.push(mother);
@@ -335,7 +349,7 @@
         seniorProof: record.seniorProof,
         seniorIdProof: getProofValue(record, 'senior'),
         isSingleParent: record.isSingleParent || record.singleParent,
-        singleParentProof: record.singleParentProof,
+        singleParentProof: getProofValue(record, 'singleParent'),
         singleParentIdProof: getProofValue(record, 'singleParent')
       });
     }
