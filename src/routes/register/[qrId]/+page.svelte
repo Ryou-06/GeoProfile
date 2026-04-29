@@ -778,11 +778,26 @@
     </div>
   {:else if !canRegister}
     <div class="p-6 flex flex-col items-center text-center mt-8">
-      <div class="w-20 h-20 rounded-full {gpsStatus === 'outside' ? 'bg-red-100 text-red-500' : 'bg-blue-100 text-blue-600'} flex items-center justify-center mb-5 font-black">GPS</div>
-      <h2 class="font-nunito font-extrabold text-slate-800 text-2xl mb-2">{locationGateTitle()}</h2>
-      <p class="text-slate-500 text-sm leading-relaxed max-w-xs mb-3">{locationGateMessage()}</p>
-      <p class="text-xs text-slate-400 leading-relaxed max-w-xs mb-6">{gpsMessage}</p>
-      <button type="button" on:click={retryGPS} class="w-full max-w-xs py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg" style="background:#0f2060;">Retry GPS</button>
+      {#if gpsStatus === 'outside'}
+        <div class="w-full max-w-sm rounded-3xl border-2 border-red-200 bg-red-50 px-5 py-6 shadow-sm">
+          <div class="w-20 h-20 rounded-full bg-red-600 text-white flex items-center justify-center mx-auto mb-5 font-black text-sm shadow-lg">BLOCKED</div>
+          <p class="text-[0.68rem] font-black tracking-[0.2em] uppercase text-red-500 mb-2">Location Restricted</p>
+          <h2 class="font-nunito font-extrabold text-red-700 text-2xl mb-3">{locationGateTitle()}</h2>
+          <p class="text-red-700 text-sm font-semibold leading-relaxed mb-3">{locationGateMessage()}</p>
+          <p class="text-xs text-red-500 leading-relaxed mb-5">{gpsMessage}</p>
+          <div class="rounded-2xl bg-white border border-red-100 px-4 py-3 mb-5 text-left">
+            <p class="text-xs font-bold text-red-700">The profiling form is locked.</p>
+            <p class="text-xs text-red-500 mt-1 leading-relaxed">Please go within Barangay Pag-Asa and retry GPS to continue.</p>
+          </div>
+          <button type="button" on:click={retryGPS} class="w-full py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg bg-red-600">Retry GPS</button>
+        </div>
+      {:else}
+        <div class="w-20 h-20 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mb-5 font-black">GPS</div>
+        <h2 class="font-nunito font-extrabold text-slate-800 text-2xl mb-2">{locationGateTitle()}</h2>
+        <p class="text-slate-500 text-sm leading-relaxed max-w-xs mb-3">{locationGateMessage()}</p>
+        <p class="text-xs text-slate-400 leading-relaxed max-w-xs mb-6">{gpsMessage}</p>
+        <button type="button" on:click={retryGPS} class="w-full max-w-xs py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg" style="background:#0f2060;">Retry GPS</button>
+      {/if}
     </div>
   {:else if submitted}
     <div class="p-6 flex flex-col items-center text-center">
