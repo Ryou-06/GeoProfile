@@ -341,12 +341,6 @@
         </svg>
         Generate QR
       </button>
-      <button class="btn btn-blue" on:click={() => { window.location.href = '/staff/register'; }}>
-        <svg class="ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-        </svg>
-        Encode Registration
-      </button>
     </div>
   </div>
 
@@ -561,17 +555,6 @@
             <div class="qa-text">
               <p class="qa-title">Generate QR code</p>
               <p class="qa-sub">Create a household registration QR</p>
-            </div>
-          </button>
-          <button class="qa-btn" on:click={() => { window.location.href = '/staff/register'; }}>
-            <div class="qa-icon qa-icon-blue">
-              <svg class="ico" fill="none" stroke="#2563eb" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </div>
-            <div class="qa-text">
-              <p class="qa-title">Encode registration</p>
-              <p class="qa-sub">Assist a resident with registration</p>
             </div>
           </button>
         </div>

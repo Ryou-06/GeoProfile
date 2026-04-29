@@ -65,6 +65,7 @@
   let maxWatchTimeout: ReturnType<typeof setTimeout> | null = null;
   let lastLocation: { lat: number; lng: number; accuracy: number } | null = null;
   let gpsRetryCount = 0;
+  let canRegister = false;
 
   let householdType: HouseholdType | '' = '';
   let agreedToTerms = false;
@@ -122,6 +123,7 @@
   const reviewLabels = ['Profile', 'Address', 'Details', 'Parents', 'Members', 'Photo'];
 
   $: fullAddress = [houseNo.trim(), street, zone ? `Zone ${zone}` : '', 'Barangay Pag-Asa', 'Olongapo City', 'Zambales'].filter(Boolean).join(', ');
+  $: canRegister = DEMO_BYPASS || gpsStatus === 'granted';
   $: isSingleParentHousehold = householdType === 'residential' && (familySetup === 'mother_only' || familySetup === 'father_only' || fatherStatus !== 'present' || motherStatus !== 'present');
   $: headOfFamily =
     fatherStatus === 'present' && father.fullName.trim()
@@ -357,6 +359,22 @@
     requestGPSEnhanced();
   }
 
+  function locationGateTitle() {
+    if (gpsStatus === 'outside') return 'Outside Pag-Asa';
+    if (gpsStatus === 'denied') return 'Location Access Needed';
+    if (gpsStatus === 'error') return 'GPS Not Ready';
+    if (gpsStatus === 'optimizing') return 'Confirming Location';
+    return 'Checking Your Location';
+  }
+
+  function locationGateMessage() {
+    if (gpsStatus === 'outside') return 'You must be physically inside Barangay Pag-Asa before you can fill out this profiling form.';
+    if (gpsStatus === 'denied') return 'Please enable location permission for your browser, then retry the GPS check.';
+    if (gpsStatus === 'error') return 'GPS could not confirm your location. Please go outdoors or near a window, then retry.';
+    if (gpsStatus === 'optimizing') return 'Please keep your phone steady while GeoProfile confirms that you are inside Barangay Pag-Asa.';
+    return 'GeoProfile is checking if you are inside Barangay Pag-Asa before opening the form.';
+  }
+
   function validateImage(file: File) {
     if (file.size > 15 * 1024 * 1024) return 'File must be less than 15MB.';
     if (!file.type.startsWith('image/')) return 'Please select an image file.';
@@ -484,8 +502,8 @@
   }
 
   function validateStep() {
+    if (!canRegister) return 'You must be inside Barangay Pag-Asa before filling out this form.';
     if (step === 1) {
-      if (!DEMO_BYPASS && gpsStatus === 'outside') return 'You must be inside Barangay Pag-Asa to register.';
       if (gpsLat === null || gpsLng === null) return 'Please wait for GPS to lock your location.';
       if (!householdType) return 'Please choose a household/profile type.';
       if (!agreedToTerms) return 'Please agree to submit your information to the system.';
@@ -579,6 +597,10 @@
   }
 
   async function handleSubmit() {
+    if (!canRegister) {
+      errorMsg = 'Registration blocked because your location is not confirmed inside Barangay Pag-Asa.';
+      return;
+    }
     for (let checkStep = 1; checkStep <= 5; checkStep++) {
       step = checkStep;
       errorMsg = validateStep();
@@ -735,7 +757,7 @@
     </div>
     <div class="ml-auto text-right">
       <p class="text-white/70 text-[0.65rem] font-semibold">
-        {gpsStatus === 'granted' || DEMO_BYPASS ? 'GPS locked' : gpsStatus === 'outside' ? 'Outside area' : gpsStatus === 'optimizing' ? 'Optimizing GPS' : 'Getting GPS'}
+        {canRegister ? 'GPS locked' : gpsStatus === 'outside' ? 'Outside area' : gpsStatus === 'optimizing' ? 'Optimizing GPS' : 'Getting GPS'}
       </p>
       {#if gpsAccuracy !== null}<p class="text-white/50 text-[0.6rem]">+/-{gpsAccuracy}m</p>{/if}
     </div>
@@ -754,11 +776,12 @@
       <h2 class="font-nunito font-extrabold text-slate-700 text-lg mb-2">Invalid QR Code</h2>
       <p class="text-sm text-slate-500">{householdError}</p>
     </div>
-  {:else if !DEMO_BYPASS && gpsStatus === 'outside'}
+  {:else if !canRegister}
     <div class="p-6 flex flex-col items-center text-center mt-8">
-      <div class="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center mb-5 text-red-500 font-black">GPS</div>
-      <h2 class="font-nunito font-extrabold text-slate-800 text-2xl mb-2">Outside Pag-Asa</h2>
-      <p class="text-slate-500 text-sm leading-relaxed max-w-xs mb-6">You must be physically inside Barangay Pag-Asa to submit this profiling form.</p>
+      <div class="w-20 h-20 rounded-full {gpsStatus === 'outside' ? 'bg-red-100 text-red-500' : 'bg-blue-100 text-blue-600'} flex items-center justify-center mb-5 font-black">GPS</div>
+      <h2 class="font-nunito font-extrabold text-slate-800 text-2xl mb-2">{locationGateTitle()}</h2>
+      <p class="text-slate-500 text-sm leading-relaxed max-w-xs mb-3">{locationGateMessage()}</p>
+      <p class="text-xs text-slate-400 leading-relaxed max-w-xs mb-6">{gpsMessage}</p>
       <button type="button" on:click={retryGPS} class="w-full max-w-xs py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg" style="background:#0f2060;">Retry GPS</button>
     </div>
   {:else if submitted}
@@ -785,9 +808,9 @@
         </div>
       </div>
 
-      <div class="rounded-2xl border px-4 py-3 {gpsStatus === 'granted' || DEMO_BYPASS ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}">
-        <p class="text-xs font-bold {gpsStatus === 'granted' || DEMO_BYPASS ? 'text-green-700' : 'text-blue-700'}">{gpsMessage}</p>
-        <p class="text-xs mt-1 {gpsStatus === 'granted' || DEMO_BYPASS ? 'text-green-600' : 'text-blue-600'}">Geo-tagging starts automatically when the QR form opens.</p>
+      <div class="rounded-2xl border px-4 py-3 {canRegister ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}">
+        <p class="text-xs font-bold {canRegister ? 'text-green-700' : 'text-blue-700'}">{gpsMessage}</p>
+        <p class="text-xs mt-1 {canRegister ? 'text-green-600' : 'text-blue-600'}">Geo-tagging starts automatically when the QR form opens.</p>
       </div>
 
       <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm overflow-x-auto">
@@ -1047,9 +1070,9 @@
       <div class="flex gap-3 pb-8">
         {#if step > 1}<button type="button" on:click={prevStep} disabled={loading} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-slate-600 bg-white border-2 border-slate-200">Back</button>{/if}
         {#if step < TOTAL_STEPS}
-          <button type="button" on:click={nextStep} disabled={loading || (step === 1 && !DEMO_BYPASS && (gpsStatus === 'outside' || gpsLat === null))} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-50" style="background:#0f2060;">Next</button>
+          <button type="button" on:click={nextStep} disabled={loading || !canRegister || (step === 1 && !DEMO_BYPASS && gpsLat === null)} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-50" style="background:#0f2060;">Next</button>
         {:else}
-          <button type="button" on:click={handleSubmit} disabled={loading} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-60" style="background:#059669;">{loading ? 'Submitting...' : 'Submit Profile'}</button>
+          <button type="button" on:click={handleSubmit} disabled={loading || !canRegister} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-60" style="background:#059669;">{loading ? 'Submitting...' : 'Submit Profile'}</button>
         {/if}
       </div>
     </div>
