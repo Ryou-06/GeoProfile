@@ -19,6 +19,7 @@
     name?: string;
     firstName?: string;
   };
+  type GenderBreakdown = { male: number; female: number };
 
   // ── Stats ──────────────────────────────────────────────
   let totalResidents: number = 0;
@@ -27,6 +28,9 @@
   let singleParents: number = 0;
   let pendingCount: number = 0;
   let declinedCount: number = 0;
+  let seniorGender: GenderBreakdown = { male: 0, female: 0 };
+  let pwdGender: GenderBreakdown = { male: 0, female: 0 };
+  let singleParentGender: GenderBreakdown = { male: 0, female: 0 };
 
   // ── Age groups (computed from birthdate) ──────────────
   let ageGroups: { child: number; youth: number; adult: number; middleAge: number; senior: number } = { 
@@ -80,6 +84,23 @@
     return typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function';
   }
 
+  function normalizeGender(resident: Resident) {
+    const value = (resident.sex ?? resident.gender ?? '').trim().toLowerCase();
+    if (value === 'male' || value === 'm') return 'male';
+    if (value === 'female' || value === 'f') return 'female';
+    return 'other';
+  }
+
+  function getGenderBreakdown(residents: Resident[], matcher: (resident: Resident) => boolean): GenderBreakdown {
+    return residents.reduce<GenderBreakdown>((totals, resident) => {
+      if (!matcher(resident)) return totals;
+      const gender = normalizeGender(resident);
+      if (gender === 'male') totals.male += 1;
+      if (gender === 'female') totals.female += 1;
+      return totals;
+    }, { male: 0, female: 0 });
+  }
+
   function computeDerived(residents: Resident[]) {
     const ag = { child: 0, youth: 0, adult: 0, middleAge: 0, senior: 0 };
     const cs: Record<string, number> = {};
@@ -116,6 +137,9 @@
     genderMap = gm;
     monthLabels = months.map(m => m.label);
     monthlyTotals = mc;
+    seniorGender = getGenderBreakdown(residents, (r) => !!r.isSenior);
+    pwdGender = getGenderBreakdown(residents, (r) => !!r.isPWD);
+    singleParentGender = getGenderBreakdown(residents, (r) => !!r.isSingleParent);
 
     updateRegChart();
     updateGenderChart();
@@ -485,6 +509,10 @@
             <p class="si-val">{seniorCitizens}</p>
             <p class="si-label">Senior Citizens</p>
             <p class="si-pct">{totalResidents ? Math.round((seniorCitizens/totalResidents)*100) : 0}%</p>
+            <div class="si-gender">
+              <span>M: {seniorGender.male.toLocaleString()}</span>
+              <span>F: {seniorGender.female.toLocaleString()}</span>
+            </div>
           </div>
         </div>
         <div class="sector-item">
@@ -497,6 +525,10 @@
             <p class="si-val">{pwds}</p>
             <p class="si-label">PWDs</p>
             <p class="si-pct">{totalResidents ? Math.round((pwds/totalResidents)*100) : 0}%</p>
+            <div class="si-gender">
+              <span>M: {pwdGender.male.toLocaleString()}</span>
+              <span>F: {pwdGender.female.toLocaleString()}</span>
+            </div>
           </div>
         </div>
         <div class="sector-item">
@@ -509,6 +541,10 @@
             <p class="si-val">{singleParents}</p>
             <p class="si-label">Single Parents</p>
             <p class="si-pct">{totalResidents ? Math.round((singleParents/totalResidents)*100) : 0}%</p>
+            <div class="si-gender">
+              <span>M: {singleParentGender.male.toLocaleString()}</span>
+              <span>F: {singleParentGender.female.toLocaleString()}</span>
+            </div>
           </div>
         </div>
         <div class="sector-item">
@@ -640,6 +676,8 @@
   .si-val   { font-size:1.3rem; font-weight:800; color:#1e293b; font-family:'Nunito',sans-serif; }
   .si-label { font-size:0.72rem; color:#64748b; margin-top:1px; }
   .si-pct   { font-size:0.68rem; color:#94a3b8; margin-top:1px; }
+  .si-gender { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .si-gender span { font-size:0.68rem; font-weight:800; color:#475569; background:#f8fafc; border:0.5px solid #e2e8f0; border-radius:999px; padding:3px 7px; line-height:1; }
 
   .act-row  { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:0.5px solid #f8fafc; }
   .act-row:last-child { border-bottom:none; }

@@ -246,7 +246,8 @@
 
   function openConfirm(action: 'approve' | 'decline') {
     if (action === 'decline') {
-      currentResidentForDecline = resident;
+      if (!resident) return;
+      currentResidentForDecline = { ...resident };
       showDeclineEmailModal = true;
       return;
     }
@@ -993,7 +994,10 @@
   <DeclineEmailModal
     resident={currentResidentForDecline}
     householdId={currentResidentForDecline.householdId || ''}
-    on:close={() => (showDeclineEmailModal = false)}
+    on:close={() => {
+      showDeclineEmailModal = false;
+      currentResidentForDecline = null;
+    }}
     on:emailSent={handleDeclineEmailSent}
   />
 {/if}
