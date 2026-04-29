@@ -212,11 +212,43 @@
             }
             .card {
               border: 2px solid #0f2060;
-              border-radius: 16px;
-              padding: 28px 24px;
-              max-width: 320px;
-              text-align: center;
+              border-radius: 14px;
+              padding: 18px;
+              width: 640px;
+              max-width: 100%;
+              min-height: 220px;
+              display: grid;
+              grid-template-columns: 270px 1fr;
+              gap: 16px;
+              align-items: start;
               background: white;
+            }
+            .qr-panel {
+              grid-column: 1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              text-align: center;
+              border-right: 1px solid #e2e8f0;
+              padding-right: 18px;
+            }
+            .info-panel {
+              grid-column: 2;
+              text-align: left;
+            }
+            .logo,
+            .subtitle,
+            .qr,
+            .qr-id,
+            .house,
+            .street {
+              grid-column: 1;
+              text-align: center;
+            }
+            .instruction-title,
+            .instruction {
+              grid-column: 2;
+              text-align: left;
             }
             .logo {
               font-size: 22px;
@@ -227,63 +259,58 @@
             .subtitle {
               font-size: 11px;
               color: #64748b;
-              margin-bottom: 16px;
+              margin-bottom: 10px;
             }
             .qr {
-              width: 220px;
-              height: 220px;
-              margin: 0 auto 16px;
+              width: 135px;
+              height: 135px;
+              margin: 6px auto 8px;
               display: block;
             }
             .qr-id {
               font-size: 15px;
               font-weight: 700;
               color: #0f2060;
-              margin-bottom: 6px;
+              margin-bottom: 4px;
               letter-spacing: 2px;
             }
             .house {
-              font-size: 13px;
+              font-size: 12px;
               color: #334155;
-              font-weight: 600;
+              font-weight: 700;
               margin-bottom: 2px;
             }
             .street {
-              font-size: 12px;
+              font-size: 11px;
               color: #334155;
               font-weight: 600;
-              margin-bottom: 4px;
+              margin-bottom: 0;
             }
             .divider {
-              border: none;
-              border-top: 1px solid #e2e8f0;
-              margin: 12px 0;
+              display: none;
             }
             .instruction-title {
-              font-size: 11px;
+              font-size: 12px;
               font-weight: 700;
               color: #334155;
-              margin-bottom: 4px;
+              margin-bottom: 8px;
             }
             .instruction {
-              font-size: 10px;
+              font-size: 12px;
               color: #64748b;
-              line-height: 1.5;
+              line-height: 1.7;
             }
             .brgy {
-              font-size: 11px;
-              color: #2563eb;
-              font-weight: 600;
-              margin-top: 8px;
+              display: none;
             }
             .vercel-badge {
-              font-size: 8px;
-              color: #94a3b8;
-              margin-top: 12px;
-              border-top: 1px solid #e2e8f0;
-              padding-top: 8px;
+              display: none;
             }
             @media print {
+              @page {
+                size: landscape;
+                margin: 12mm;
+              }
               body {
                 padding: 0;
                 margin: 0;
@@ -293,17 +320,42 @@
                 page-break-inside: avoid;
               }
             }
+            @media (max-width: 700px) {
+              .card {
+                grid-template-columns: 1fr;
+              }
+              .logo,
+              .subtitle,
+              .qr,
+              .qr-id,
+              .house,
+              .street,
+              .instruction-title,
+              .instruction {
+                grid-column: 1;
+                text-align: center;
+              }
+              .qr-panel {
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+                padding-right: 0;
+                padding-bottom: 18px;
+              }
+            }
           </style>
         </head>
         <body>
           <div class="card">
+            <div class="qr-panel">
             <div class="logo">📍 GeoProfile</div>
             <div class="subtitle">Barangay Pag-Asa · Resident Profiling System</div>
             <img class="qr" src="${qrDataUrl}" alt="QR Code" />
             <div class="qr-id">${generatedHousehold.qrId}</div>
             <div class="house">House No. ${generatedHousehold.houseNo}</div>
             <div class="street">Barangay Pag-Asa</div>
+            </div>
             <hr class="divider" />
+            <div class="info-panel">
             <div class="instruction-title">HOW TO REGISTER:</div>
             <div class="instruction">
               1. Open your phone camera<br/>
@@ -312,6 +364,7 @@
               4. Provide your street address<br/>
               5. Take a photo of your house<br/>
               6. Submit the form
+            </div>
             </div>
             <div class="brgy">Olongapo City, Zambales</div>
             <div class="vercel-badge">Permanent QR Code · Live 24/7</div>
@@ -513,11 +566,24 @@
 
 <!-- Print Modal -->
 {#if showPrintModal}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" on:click={() => showPrintModal = false}>
-    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col" on:click|stopPropagation>
+  <div
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    role="button"
+    tabindex="0"
+    aria-label="Close print preview"
+    on:click={() => showPrintModal = false}
+    on:keydown={(event) => {
+      if (event.key === 'Enter' || event.key === ' ') showPrintModal = false;
+    }}
+  >
+    <div
+      class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      role="presentation"
+      on:click|stopPropagation
+    >
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
         <h3 class="font-nunito font-extrabold text-slate-800">Print Preview</h3>
-        <button type="button" on:click={() => showPrintModal = false} class="text-slate-400 hover:text-slate-600 transition-colors">
+        <button type="button" aria-label="Close print preview" on:click={() => showPrintModal = false} class="text-slate-400 hover:text-slate-600 transition-colors">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -525,8 +591,8 @@
       </div>
       
       <div class="flex-1 overflow-auto p-6 bg-slate-100">
-        <div class="bg-white rounded-xl shadow-lg mx-auto" style="max-width: 360px;">
-          <iframe id="print-frame" class="w-full h-[600px] border-0" srcdoc={printContent}></iframe>
+        <div class="bg-white rounded-xl shadow-lg mx-auto" style="max-width: 700px;">
+          <iframe id="print-frame" class="w-full h-[320px] border-0" title="QR print preview" srcdoc={printContent}></iframe>
         </div>
       </div>
       
