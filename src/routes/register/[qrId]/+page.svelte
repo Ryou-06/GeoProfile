@@ -368,7 +368,7 @@
   }
 
   function locationGateMessage() {
-    if (gpsStatus === 'outside') return 'You must be physically inside Barangay Pag-Asa before you can fill out this profiling form.';
+    if (gpsStatus === 'outside') return 'Your location is outside the Barangay Pag-Asa boundary, so this QR registration cannot continue.';
     if (gpsStatus === 'denied') return 'Please enable location permission for your browser, then retry the GPS check.';
     if (gpsStatus === 'error') return 'GPS could not confirm your location. Please go outdoors or near a window, then retry.';
     if (gpsStatus === 'optimizing') return 'Please keep your phone steady while GeoProfile confirms that you are inside Barangay Pag-Asa.';
@@ -787,7 +787,7 @@
           <p class="text-xs text-red-500 leading-relaxed mb-5">{gpsMessage}</p>
           <div class="rounded-2xl bg-white border border-red-100 px-4 py-3 mb-5 text-left">
             <p class="text-xs font-bold text-red-700">The profiling form is locked.</p>
-            <p class="text-xs text-red-500 mt-1 leading-relaxed">Please go within Barangay Pag-Asa and retry GPS to continue.</p>
+            <p class="text-xs text-red-500 mt-1 leading-relaxed">If this household is a Pag-Asa resident, contact barangay staff for verification.</p>
           </div>
           <button type="button" on:click={retryGPS} class="w-full py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg bg-red-600">Retry GPS</button>
         </div>
