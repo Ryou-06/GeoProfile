@@ -115,9 +115,11 @@
 
   let housePhoto: File | null = null;
   let housePhotoPreview = '';
+  let reviewPage = 0;
 
   const streets = ['Gordon Avenue', 'Murphy Street', 'Natividad Street', 'Burgos Street', 'East 12th Street', 'Perimeter Road', 'Bonifacio Street'];
   const stepLabels = ['Type', 'Details', 'Parents', 'Members', 'Photo', 'Review'];
+  const reviewLabels = ['Profile', 'Address', 'Details', 'Parents', 'Members', 'Photo'];
 
   $: fullAddress = [houseNo.trim(), street, zone ? `Zone ${zone}` : '', 'Barangay Pag-Asa', 'Olongapo City', 'Zambales'].filter(Boolean).join(', ');
   $: isSingleParentHousehold = householdType === 'residential' && (familySetup === 'mother_only' || familySetup === 'father_only' || fatherStatus !== 'present' || motherStatus !== 'present');
@@ -165,6 +167,17 @@
   function isSenior(person: PersonProfile) {
     const age = calculateAge(person.birthdate);
     return age !== null && age >= 60;
+  }
+
+  function seniorStatusText(person: PersonProfile) {
+    const age = calculateAge(person.birthdate);
+    if (age === null) return 'Enter birthdate to check senior status.';
+    if (age >= 60) return `Auto-detected as Senior Citizen, age ${age}. Proof is required.`;
+    return `Disabled, age ${age}. Senior Citizen applies at 60 years old and above.`;
+  }
+
+  function pwdProofLabel(person: PersonProfile) {
+    return person.pwdType ? `Upload ${person.pwdType} Proof` : 'Upload PWD Proof';
   }
 
   function getFirstName(fullName: string) {
@@ -475,6 +488,7 @@
     errorMsg = validateStep();
     if (errorMsg) return;
     step = Math.min(TOTAL_STEPS, step + 1);
+    if (step === 6) reviewPage = 0;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -482,6 +496,14 @@
     errorMsg = '';
     step = Math.max(1, step - 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function nextReviewPage() {
+    reviewPage = Math.min(reviewLabels.length - 1, reviewPage + 1);
+  }
+
+  function prevReviewPage() {
+    reviewPage = Math.max(0, reviewPage - 1);
   }
 
   function serializePerson(person: PersonProfile) {
@@ -864,26 +886,97 @@
         </section>
       {:else if step === 6}
         <section class="panel">
-          <div><p class="eyebrow">Part 6</p><h2 class="title">Review Before Submitting</h2><p class="sub">Please check the profile details before final submission.</p></div>
-          <div class="review-grid">
-            {@render ReviewItem('Profile Type', householdType || '-')}
-            {@render ReviewItem('Address', fullAddress || '-')}
-            {@render ReviewItem('GPS', gpsLat && gpsLng ? `${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)} (+/-${gpsAccuracy ?? 'N/A'}m)` : 'Waiting for GPS')}
-            {#if householdType === 'residential'}
-              {@render ReviewItem('Head of Family', headOfFamily?.fullName || '-')}
-              {@render ReviewItem('Family Members', `${members.length}`)}
-              {@render ReviewItem('Single Parent', isSingleParentHousehold ? 'Yes' : 'No')}
-            {:else if householdType === 'business'}
-              {@render ReviewItem('Business', businessInfo.businessName || '-')}
-              {@render ReviewItem('Owner', businessInfo.ownerName || '-')}
-              {@render ReviewItem('Business Type', businessInfo.businessType || '-')}
+          <div><p class="eyebrow">Part 6</p><h2 class="title">Review Before Submitting</h2><p class="sub">Use the section controls to review every part of the form.</p></div>
+
+          <div class="review-tabs">
+            {#each reviewLabels as label, index (label)}
+              <button type="button" on:click={() => (reviewPage = index)} class="review-tab {reviewPage === index ? 'review-tab-active' : ''}">
+                {index + 1}. {label}
+              </button>
+            {/each}
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="flex items-center justify-between gap-3 mb-4">
+              <button type="button" on:click={prevReviewPage} disabled={reviewPage === 0} class="review-nav" aria-label="Previous review section">Back</button>
+              <p class="text-sm font-extrabold text-slate-700">{reviewLabels[reviewPage]}</p>
+              <button type="button" on:click={nextReviewPage} disabled={reviewPage === reviewLabels.length - 1} class="review-nav" aria-label="Next review section">Next</button>
+            </div>
+
+            {#if reviewPage === 0}
+              <div class="review-grid">
+                {@render ReviewItem('Profile Type', householdType || '-')}
+                {@render ReviewItem('Terms Accepted', agreedToTerms ? 'Yes' : 'No')}
+                {@render ReviewItem('QR ID', qrId ?? '-')}
+                {@render ReviewItem('Status', 'Pending review')}
+              </div>
+            {:else if reviewPage === 1}
+              <div class="review-grid">
+                {@render ReviewItem('House / Unit', houseNo || '-')}
+                {@render ReviewItem('Street', street || '-')}
+                {@render ReviewItem('Zone', zone || '-')}
+                {@render ReviewItem('Landmark', landmark || '-')}
+                {@render ReviewItem('Full Address', fullAddress || '-')}
+                {@render ReviewItem('GPS', gpsLat && gpsLng ? `${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)} (+/-${gpsAccuracy ?? 'N/A'}m)` : 'Waiting for GPS')}
+              </div>
+            {:else if reviewPage === 2}
+              <div class="review-grid">
+                {#if householdType === 'residential'}
+                  {@render ReviewItem('Dwelling Type', residentialInfo.dwellingType || '-')}
+                  {@render ReviewItem('Ownership Status', residentialInfo.ownershipStatus || '-')}
+                  {@render ReviewItem('Years of Stay', residentialInfo.yearsOfStay || '-')}
+                  {@render ReviewItem('Income Range', residentialInfo.monthlyIncomeRange || '-')}
+                  {@render ReviewItem('Utilities', residentialInfo.utilities.join(', ') || '-')}
+                {:else if householdType === 'business'}
+                  {@render ReviewItem('Business Name', businessInfo.businessName || '-')}
+                  {@render ReviewItem('Owner', businessInfo.ownerName || '-')}
+                  {@render ReviewItem('Business Type', businessInfo.businessType || '-')}
+                  {@render ReviewItem('Permit Number', businessInfo.permitNo || '-')}
+                  {@render ReviewItem('Contact Number', businessInfo.contactNo || '-')}
+                  {@render ReviewItem('Employees', businessInfo.employeesCount || '-')}
+                  {@render ReviewItem('Years Operating', businessInfo.operatingYears || '-')}
+                {:else}
+                  {@render ReviewItem('Property Name', boardingInfo.propertyName || '-')}
+                  {@render ReviewItem('Owner / Manager', boardingInfo.ownerName || '-')}
+                  {@render ReviewItem('Rooms', boardingInfo.roomsCount || '-')}
+                  {@render ReviewItem('Tenant Capacity', boardingInfo.tenantCapacity || '-')}
+                  {@render ReviewItem('Current Tenants', boardingInfo.currentTenants || '-')}
+                  {@render ReviewItem('Contact Number', boardingInfo.contactNo || '-')}
+                  {@render ReviewItem('Years Operating', boardingInfo.operatingYears || '-')}
+                {/if}
+              </div>
+            {:else if reviewPage === 3}
+              {#if householdType !== 'residential'}
+                <p class="text-sm text-slate-500">No parent or household-head details required for this profile type.</p>
+              {:else}
+                <div class="space-y-3">
+                  {@render ReviewItem('Family Setup', familySetup.replaceAll('_', ' '))}
+                  {@render ReviewItem('Father Status', fatherStatus)}
+                  {@render ReviewItem('Mother Status', motherStatus)}
+                  {#if fatherStatus === 'present'}{@render PersonReview('Father / Male Head', father)}{/if}
+                  {#if motherStatus === 'present'}{@render PersonReview('Mother / Female Head', mother)}{/if}
+                  {@render ReviewItem('Single Parent / Guardian', isSingleParentHousehold ? 'Yes, proof uploaded' : 'No')}
+                </div>
+              {/if}
+            {:else if reviewPage === 4}
+              {#if householdType !== 'residential'}
+                <p class="text-sm text-slate-500">No family member records required for this profile type.</p>
+              {:else if members.length === 0}
+                <p class="text-sm text-slate-500">No additional family members were added.</p>
+              {:else}
+                <div class="space-y-3">
+                  {#each members as member, index (member.id)}
+                    {@render PersonReview(`Family Member ${index + 1} - ${member.relationship || 'Relationship not set'}`, member)}
+                  {/each}
+                </div>
+              {/if}
             {:else}
-              {@render ReviewItem('Property', boardingInfo.propertyName || '-')}
-              {@render ReviewItem('Owner', boardingInfo.ownerName || '-')}
-              {@render ReviewItem('Rooms', boardingInfo.roomsCount || '-')}
+              <div class="space-y-3">
+                {@render ReviewItem('Photo Captured', housePhotoPreview ? 'Yes' : 'No')}
+                {#if housePhotoPreview}<img src={housePhotoPreview} alt="Preview" class="w-full h-48 object-cover rounded-xl border border-slate-200" />{/if}
+              </div>
             {/if}
           </div>
-          {#if housePhotoPreview}<img src={housePhotoPreview} alt="Preview" class="w-full h-48 object-cover rounded-xl border border-slate-200" />{/if}
         </section>
       {/if}
 
@@ -917,12 +1010,15 @@
     </div>
     <div class="grid md:grid-cols-2 gap-3">
       <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer"><input type="checkbox" bind:checked={person.isPWD} class="mt-1" /><span><span class="block text-sm font-bold text-slate-700">PWD</span><span class="block text-xs text-slate-400">Requires type and proof.</span></span></label>
-      <div class="rounded-xl border border-slate-200 bg-white p-3"><p class="text-sm font-bold text-slate-700">Senior Citizen</p><p class="text-xs {isSenior(person) ? 'text-emerald-600' : 'text-slate-400'}">{isSenior(person) ? `Auto-detected, age ${calculateAge(person.birthdate)}` : 'Auto-detected when age is 60+'}</p></div>
+      <div class="rounded-xl border p-3 {isSenior(person) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-100 opacity-70'}">
+        <p class="text-sm font-bold {isSenior(person) ? 'text-emerald-700' : 'text-slate-500'}">Senior Citizen</p>
+        <p class="text-xs {isSenior(person) ? 'text-emerald-600' : 'text-slate-400'}">{seniorStatusText(person)}</p>
+      </div>
     </div>
     {#if person.isPWD}
       <div class="space-y-3">
-        <div><label class="label">PWD Type <span class="text-red-400">*</span></label><select class="input" bind:value={person.pwdType}><option value="">Select</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
-        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">Upload PWD Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
+        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select class="input" bind:value={person.pwdType}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
+        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
       </div>
     {/if}
     {#if isSenior(person)}
@@ -935,6 +1031,29 @@
   <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
     <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">{label}</p>
     <p class="text-sm font-semibold text-slate-700 mt-1 capitalize">{value}</p>
+  </div>
+{/snippet}
+
+{#snippet PersonReview(title: string, person: PersonProfile | FamilyMember)}
+  <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+    <p class="text-sm font-extrabold text-slate-700">{title}</p>
+    <div class="review-grid">
+      {@render ReviewItem('Full Name', person.fullName || '-')}
+      {#if 'relationship' in person}
+        {@render ReviewItem('Relationship', person.relationship || '-')}
+      {/if}
+      {@render ReviewItem('Birthdate / Age', person.birthdate ? `${person.birthdate} / ${calculateAge(person.birthdate) ?? '-'} yrs` : '-')}
+      {@render ReviewItem('Sex', person.sex || '-')}
+      {@render ReviewItem('Civil Status', person.civilStatus || '-')}
+      {@render ReviewItem('Occupation', person.occupation || '-')}
+      {@render ReviewItem('Contact No.', person.contactNo || '-')}
+      {@render ReviewItem('Email', person.email || '-')}
+      {@render ReviewItem('PWD', person.isPWD ? `${person.pwdType || 'Selected'} with proof` : 'No')}
+      {@render ReviewItem('Senior Citizen', isSenior(person) ? 'Yes, proof uploaded' : 'No')}
+      {@render ReviewItem('Vaccination Status', person.vaccinationStatus || '-')}
+      {@render ReviewItem('Blood Type', person.bloodType || '-')}
+      {@render ReviewItem('Medical Notes', person.medicalNotes || '-')}
+    </div>
   </div>
 {/snippet}
 
