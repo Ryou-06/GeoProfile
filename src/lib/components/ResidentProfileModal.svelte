@@ -1,61 +1,107 @@
 <!-- src/lib/components/ResidentProfileModal.svelte -->
-<!-- Updated to show staff name who created the QR code -->
-
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import DeclineEmailModal from './DeclineEmailModal.svelte';
 
-  // ── Props ──────────────────────────────────────────────
+  type Status = 'pending' | 'approved' | 'declined';
+
+  interface AnyRecord {
+    [key: string]: unknown;
+  }
+
   interface Resident {
     id: string;
     firstName?: string;
     lastName?: string;
     middleName?: string;
+    extensionName?: string;
     name?: string;
     age?: number;
     sex?: string;
     civilStatus?: string;
     contactNo?: string;
+    email?: string;
     address?: string;
     houseNo?: string;
     street?: string;
     purok?: string;
     zone?: string;
+    landmark?: string;
     lat?: number;
     lng?: number;
     gpsAccuracy?: number;
     photoUrl?: string;
     birthdate?: string;
-    status?: 'pending' | 'approved' | 'declined';
+    status?: Status;
     isPWD?: boolean;
     pwdType?: string;
+    pwdProof?: string;
     pwdIdProof?: string;
     isSenior?: boolean;
+    seniorProof?: string;
     seniorIdProof?: string;
     isSingleParent?: boolean;
+    singleParent?: boolean;
+    singleParentProof?: string;
     singleParentIdProof?: string;
     submittedAt?: { toDate(): Date } | Date | string;
     encodedBy?: string;
     householdId?: string;
-    placeOfBirth?: string;
+    qrId?: string;
     occupation?: string;
-    citizenship?: string;
-    extensionName?: string;
+    householdType?: string;
+    profileKind?: string;
+    householdDetails?: AnyRecord;
+    parents?: {
+      father?: AnyRecord;
+      mother?: AnyRecord;
+    };
+    familyMembers?: AnyRecord[];
+    occupantRecords?: AnyRecord[];
+    memberCount?: number;
+    termsAccepted?: boolean;
   }
 
-  let showDeclineEmailModal = false;
-  let currentResidentForDecline: Resident | null = null;
+  interface HouseholdMember {
+    id: string;
+    sourceIndex: number;
+    role: string;
+    relationship?: string;
+    fullName: string;
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
+    age?: number;
+    birthdate?: string;
+    sex?: string;
+    civilStatus?: string;
+    contactNo?: string;
+    email?: string;
+    occupation?: string;
+    status?: string;
+    isPWD?: boolean;
+    pwdType?: string;
+    pwdProof?: string;
+    pwdIdProof?: string;
+    isSenior?: boolean;
+    seniorProof?: string;
+    seniorIdProof?: string;
+    isSingleParent?: boolean;
+    singleParent?: boolean;
+    singleParentProof?: string;
+    singleParentIdProof?: string;
+    vaccinationStatus?: string;
+    bloodType?: string;
+    medicalNotes?: string;
+  }
 
-  export let resident: Resident | null = null;
-  
+  interface ProofImage {
+    label: string;
+    src?: string;
+    tone: 'amber' | 'emerald' | 'violet';
+    submitted: boolean;
+  }
 
-  const dispatch = createEventDispatcher<{
-    close: void;
-    statusChange: { id: string; status: 'approved' | 'declined' };
-  }>();
-
-  // ── Staff information from QR code ─────────────────────
-  let qrStaffName: string = '';
   interface HouseholdInfo {
     id?: string;
     createdByName?: string;
@@ -64,36 +110,100 @@
     qrId?: string;
     [key: string]: unknown;
   }
+
+  export let resident: Resident | null = null;
+
+  const dispatch = createEventDispatcher<{
+    close: void;
+    statusChange: { id: string; status: Status };
+  }>();
+
+  let qrStaffName = '';
   let householdInfo: HouseholdInfo | null = null;
   let loadingStaff = false;
+  let loadedHouseholdId = '';
 
-  // ── Fetch staff name from household document ───────────
-  async function fetchStaffFromHousehold() {
-    if (!resident?.householdId) return;
-    
+  let showPhotoLightbox = false;
+  let lightboxSrc = '';
+  let lightboxLabel = '';
+
+  let showDeclineEmailModal = false;
+  let currentResidentForDecline: Resident | null = null;
+
+  let confirmModal: {
+    open: boolean;
+    action: 'approve' | 'decline';
+  } = { open: false, action: 'approve' };
+
+  let selectedMemberIndex: number | null = null;
+  let memberPage = 0;
+  let lastResidentId = '';
+
+  const memberPageSize = 5;
+
+  const statusStyles: Record<Status, string> = {
+    pending: 'bg-amber-100 text-amber-700 border-amber-200',
+    approved: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    declined: 'bg-rose-100 text-rose-700 border-rose-200'
+  };
+
+  const proofStyles: Record<ProofImage['tone'], string> = {
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    violet: 'border-violet-200 bg-violet-50 text-violet-700'
+  };
+
+  $: if (resident?.id && resident.id !== lastResidentId) {
+    lastResidentId = resident.id;
+    selectedMemberIndex = null;
+    memberPage = 0;
+    showPhotoLightbox = false;
+    lightboxSrc = '';
+    lightboxLabel = '';
+  }
+
+  $: if (resident?.householdId && resident.householdId !== loadedHouseholdId) {
+    fetchStaffFromHousehold(resident.householdId);
+  }
+
+  $: householdMembers = buildHouseholdMembers(resident);
+  $: selectedMember =
+    selectedMemberIndex !== null ? householdMembers[selectedMemberIndex] ?? null : null;
+  $: pageCount = Math.max(1, Math.ceil(householdMembers.length / memberPageSize));
+  $: if (memberPage > pageCount - 1) memberPage = pageCount - 1;
+  $: visibleMembers = householdMembers
+    .map((member, index) => ({ member, index }))
+    .slice(memberPage * memberPageSize, memberPage * memberPageSize + memberPageSize);
+  $: mapSrc =
+    typeof resident?.lat === 'number' && typeof resident?.lng === 'number'
+      ? `https://maps.google.com/maps?q=${resident.lat},${resident.lng}&z=17&output=embed`
+      : null;
+  $: selectedProofImages = getProofItems(selectedMember);
+
+  async function fetchStaffFromHousehold(householdId: string) {
+    loadedHouseholdId = householdId;
     loadingStaff = true;
+    qrStaffName = '';
+    householdInfo = null;
+
     try {
       const { db } = await import('$lib/firebase');
       const { doc, getDoc } = await import('firebase/firestore');
-      
-      const householdDoc = await getDoc(doc(db, 'households', resident.householdId));
-      
+      const householdDoc = await getDoc(doc(db, 'households', householdId));
+
       if (householdDoc.exists()) {
         householdInfo = { id: householdDoc.id, ...householdDoc.data() };
-        
-        // First check if createdByName exists (from updated QR generator)
-        if (householdInfo.createdByName) {
+
+        if (typeof householdInfo.createdByName === 'string') {
           qrStaffName = householdInfo.createdByName;
-        } 
-        // Fallback: fetch from users collection
-        else if (householdInfo.createdBy) {
-          
-          const userDoc = await getDoc(doc(db, 'users', householdInfo.createdBy as string));
+        } else if (typeof householdInfo.createdBy === 'string') {
+          const userDoc = await getDoc(doc(db, 'users', householdInfo.createdBy));
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            qrStaffName = userData.name || userData.displayName || userData.email || (householdInfo.createdBy as string);
+            qrStaffName =
+              userData.name || userData.displayName || userData.email || householdInfo.createdBy;
           } else {
-            qrStaffName = householdInfo.createdBy as string;
+            qrStaffName = householdInfo.createdBy;
           }
         }
       }
@@ -105,722 +215,797 @@
     }
   }
 
-  // Watch for resident changes and fetch staff info
-  $: if (resident) {
-    fetchStaffFromHousehold();
-    showPhotoLightbox = false;
-    lightboxSrc = '';
-    lightboxLabel = '';
-  }
-
-  // ── Photo lightbox ─────────────────────────────────────
-  let showPhotoLightbox = false;
-  let lightboxSrc = '';
-  let lightboxLabel = '';
-
-  // ── Confirm modal ──────────────────────────────────────
-  let confirmModal: {
-    open: boolean;
-    action: 'approve' | 'decline';
-  } = { open: false, action: 'approve' };
-
-  // ── Maps URLs ──────────────────────────────────────────
-  $: mapSrc = (resident?.lat && resident?.lng)
-    ? `https://maps.google.com/maps?q=${resident.lat},${resident.lng}&z=17&output=embed`
-    : null;
-
-  // ── Proof images list (only sectors resident belongs to AND has proof) ──
-$: proofImages = (() => {
-  if (!resident) return [];
-  const list: { label: string; src: string; color: string; icon: string; hasProof: boolean }[] = [];
-  
-  // Check PWD - only add if has proof image (not null, not empty)
-  if (resident.isPWD) {
-    const hasProof = !!(resident.pwdIdProof && resident.pwdIdProof !== '');
-    list.push({
-      label: `PWD ID Proof${resident.pwdType ? ` — ${resident.pwdType}` : ''}`,
-      src: resident.pwdIdProof ?? '',
-      color: 'amber',
-      icon: '♿',
-      hasProof: hasProof
-    });
-  }
-  
-  // Check Senior - only add if has proof image (not null, not empty)
-  if (resident.isSenior) {
-    const hasProof = !!(resident.seniorIdProof && resident.seniorIdProof !== '');
-    list.push({
-      label: 'Senior Citizen ID Proof',
-      src: resident.seniorIdProof ?? '',
-      color: 'emerald',
-      icon: '🧓',
-      hasProof: hasProof
-    });
-  }
-  
-  // Check Single Parent - only add if has proof image (not null, not empty)
-  if (resident.isSingleParent) {
-    const hasProof = !!(resident.singleParentIdProof && resident.singleParentIdProof !== '');
-    list.push({
-      label: 'Single Parent ID Proof',
-      src: resident.singleParentIdProof ?? '',
-      color: 'violet',
-      icon: '👤',
-      hasProof: hasProof
-    });
-  }
-  
-  return list;
-})();
-
-  // ── Keyboard handler ───────────────────────────────────
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (showPhotoLightbox) { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; return; }
-      if (confirmModal.open) { confirmModal = { open: false, action: 'approve' }; return; }
-      dispatch('close');
+    if (e.key !== 'Escape') return;
+    if (showPhotoLightbox) {
+      closeLightbox();
+      return;
     }
+    if (confirmModal.open) {
+      confirmModal = { open: false, action: 'approve' };
+      return;
+    }
+    dispatch('close');
   }
 
-  // ── Open lightbox for any image ────────────────────────
   function openLightbox(src: string, label: string) {
     lightboxSrc = src;
     lightboxLabel = label;
     showPhotoLightbox = true;
   }
 
-  // ── Approve / Decline ───────────────────────────────────
-function openConfirm(action: 'approve' | 'decline') {
-  if (action === 'decline') {
-    // Open email modal instead of simple confirm
-    currentResidentForDecline = resident;
-    showDeclineEmailModal = true;
-  } else {
+  function closeLightbox() {
+    showPhotoLightbox = false;
+    lightboxSrc = '';
+    lightboxLabel = '';
+  }
+
+  function handleLightboxBackdrop(event: MouseEvent) {
+    if (event.target === event.currentTarget) closeLightbox();
+  }
+
+  function openConfirm(action: 'approve' | 'decline') {
+    if (action === 'decline') {
+      currentResidentForDecline = resident;
+      showDeclineEmailModal = true;
+      return;
+    }
+
     confirmModal = { open: true, action };
   }
-}
 
-async function handleDeclineEmailSent() {
-  showDeclineEmailModal = false;
-  
-  // Update the status to declined in the database
-  if (resident && currentResidentForDecline) {
+  async function handleDeclineEmailSent() {
+    showDeclineEmailModal = false;
+
+    if (!resident || !currentResidentForDecline) return;
+
     try {
       const { db } = await import('$lib/firebase');
       const { updateDoc, doc } = await import('firebase/firestore');
-      
-      // Update the resident status to 'declined' in Firebase
-      await updateDoc(doc(db, 'residents', resident.id), { 
-        status: 'declined' 
-      });
-      
-      // Update local copy so badge reflects change immediately
+      await updateDoc(doc(db, 'residents', resident.id), { status: 'declined' });
       resident = { ...resident, status: 'declined' };
-      
-      // Dispatch event to refresh the parent component
       dispatch('statusChange', { id: resident.id, status: 'declined' });
-      
-      console.log('✅ Resident status updated to declined');
-      
-      // Optional: Show success message
       alert('Resident has been declined and email notification sent.');
     } catch (error) {
-      console.error('❌ Error updating resident status:', error);
+      console.error('Error updating resident status:', error);
       alert('Failed to update resident status. Please try again.');
     }
   }
-}
 
-async function confirmAction() {
-  if (!resident) return;
-  try {
-    const { db } = await import('$lib/firebase');
-    const { updateDoc, doc } = await import('firebase/firestore');
-    const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
-    await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
-    // Update local copy so badge reflects change immediately
-    resident = { ...resident, status: newStatus };
-    dispatch('statusChange', { id: resident.id, status: newStatus });
-  } catch (e) { 
-    console.error(e); 
-    alert('Failed to update status. Please try again.');
+  async function confirmAction() {
+    if (!resident) return;
+
+    try {
+      const { db } = await import('$lib/firebase');
+      const { updateDoc, doc } = await import('firebase/firestore');
+      const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
+      await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
+      resident = { ...resident, status: newStatus };
+      dispatch('statusChange', { id: resident.id, status: newStatus });
+    } catch (error) {
+      console.error(error);
+      alert('Failed to update status. Please try again.');
+    }
+
+    confirmModal = { open: false, action: 'approve' };
   }
-  confirmModal = { open: false, action: 'approve' };
-}
 
-  // ── Helpers ────────────────────────────────────────────
-  function getInitials(r: Resident) {
-    if (r?.firstName && r?.lastName) return `${r.firstName[0]}${r.lastName[0]}`.toUpperCase();
-    return (r?.name ?? '??').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase();
+  function buildHouseholdMembers(record: Resident | null): HouseholdMember[] {
+    if (!record) return [];
+
+    const members: HouseholdMember[] = [];
+    const father = normalizeMember(record.parents?.father, 'Father / Head', members.length);
+    const mother = normalizeMember(record.parents?.mother, 'Mother / Head', members.length);
+
+    if (father) members.push(father);
+    if (mother) members.push(mother);
+
+    for (const member of record.familyMembers ?? []) {
+      const normalized = normalizeMember(member, 'Family Member', members.length);
+      if (normalized) members.push(normalized);
+    }
+
+    for (const occupant of record.occupantRecords ?? []) {
+      const normalized = normalizeMember(occupant, 'Tenant / Boarder', members.length);
+      if (normalized) members.push(normalized);
+    }
+
+    if (!members.length) {
+      members.push({
+        id: record.id,
+        sourceIndex: 0,
+        role: 'Resident',
+        relationship: 'Household Head',
+        fullName: getResidentName(record),
+        firstName: record.firstName,
+        middleName: record.middleName,
+        lastName: record.lastName,
+        age: record.age,
+        birthdate: record.birthdate,
+        sex: record.sex,
+        civilStatus: record.civilStatus,
+        contactNo: record.contactNo,
+        email: record.email,
+        occupation: record.occupation,
+        isPWD: record.isPWD,
+        pwdType: record.pwdType,
+        pwdProof: record.pwdProof,
+        pwdIdProof: getProofValue(record, 'pwd'),
+        isSenior: record.isSenior,
+        seniorProof: record.seniorProof,
+        seniorIdProof: getProofValue(record, 'senior'),
+        isSingleParent: record.isSingleParent || record.singleParent,
+        singleParentProof: record.singleParentProof,
+        singleParentIdProof: getProofValue(record, 'singleParent')
+      });
+    }
+
+    return members.map((member, index) => ({ ...member, sourceIndex: index }));
+  }
+
+  function normalizeMember(input: AnyRecord | undefined, fallbackRole: string, index: number) {
+    if (!input) return null;
+
+    const status = text(input.status);
+    const firstName = text(input.firstName);
+    const middleName = text(input.middleName);
+    const lastName = text(input.lastName);
+    const fullName = text(input.fullName) || [firstName, middleName, lastName].filter(Boolean).join(' ');
+
+    if (!fullName && status !== 'deceased') return null;
+
+    return {
+      id: text(input.id) || `${fallbackRole}-${index}`,
+      sourceIndex: index,
+      role: text(input.role) || fallbackRole,
+      relationship: text(input.relationship),
+      fullName: fullName || `${fallbackRole} (${capitalize(status)})`,
+      firstName,
+      middleName,
+      lastName,
+      age: numberValue(input.age),
+      birthdate: text(input.birthdate),
+      sex: text(input.sex),
+      civilStatus: text(input.civilStatus),
+      contactNo: text(input.contactNo || input.mobileNo || input.phone),
+      email: text(input.email),
+      occupation: text(input.occupation),
+      status,
+      isPWD: Boolean(input.isPWD),
+      pwdType: text(input.pwdType),
+      pwdProof: getProofValue(input, 'pwd'),
+      pwdIdProof: getProofValue(input, 'pwd'),
+      isSenior: Boolean(input.isSenior),
+      seniorProof: getProofValue(input, 'senior'),
+      seniorIdProof: getProofValue(input, 'senior'),
+      isSingleParent: Boolean(input.isSingleParent || input.singleParent),
+      singleParentProof: getProofValue(input, 'singleParent'),
+      singleParentIdProof: getProofValue(input, 'singleParent'),
+      vaccinationStatus: text(input.vaccinationStatus),
+      bloodType: text(input.bloodType),
+      medicalNotes: text(input.medicalNotes)
+    };
+  }
+
+  function getProofItems(member: HouseholdMember | null): ProofImage[] {
+    if (!member) return [];
+
+    const proofs: ProofImage[] = [];
+    if (member.isPWD) {
+      proofs.push({
+        label: member.pwdType ? `PWD Proof - ${member.pwdType}` : 'PWD Proof',
+        src: member.pwdIdProof,
+        tone: 'amber',
+        submitted: Boolean(member.pwdIdProof)
+      });
+    }
+    if (member.isSenior) {
+      proofs.push({
+        label: 'Senior Citizen Proof',
+        src: member.seniorIdProof,
+        tone: 'emerald',
+        submitted: Boolean(member.seniorIdProof)
+      });
+    }
+    if (member.isSingleParent) {
+      proofs.push({
+        label: 'Single Parent Proof',
+        src: member.singleParentIdProof,
+        tone: 'violet',
+        submitted: Boolean(member.singleParentIdProof)
+      });
+    }
+
+    return proofs;
+  }
+
+  function getProofValue(value: unknown, type: 'pwd' | 'senior' | 'singleParent') {
+    const input = value && typeof value === 'object' ? (value as AnyRecord) : {};
+    const proofs = input.proofs && typeof input.proofs === 'object' ? (input.proofs as AnyRecord) : {};
+
+    if (type === 'pwd') {
+      return text(input.pwdIdProof || input.pwdProof || proofs.pwdIdProof || proofs.pwdProof);
+    }
+    if (type === 'senior') {
+      return text(input.seniorIdProof || input.seniorProof || proofs.seniorIdProof || proofs.seniorProof);
+    }
+    return text(
+      input.singleParentIdProof ||
+        input.singleParentProof ||
+        proofs.singleParentIdProof ||
+        proofs.singleParentProof
+    );
+  }
+
+  function getResidentName(record: Resident) {
+    return (
+      record.name ||
+      [record.firstName, record.middleName, record.lastName, record.extensionName]
+        .filter(Boolean)
+        .join(' ') ||
+      'Unnamed Resident'
+    );
+  }
+
+  function getProfileType(record: Resident) {
+    const type = record.householdType || record.profileKind || 'residential';
+    if (type === 'business') return 'Business / Establishment';
+    if (type === 'boarding') return 'Rental / Boarding';
+    return 'Residential Household';
+  }
+
+  function getPrimaryDetails(record: Resident) {
+    const details = record.householdDetails ?? {};
+    const type = record.householdType || record.profileKind;
+
+    if (type === 'business') {
+      const business = (details.business as AnyRecord | undefined) ?? details;
+      return [
+        ['Business Name', text(business.businessName || business.name)],
+        ['Owner', text(business.ownerName || business.owner)],
+        ['Business Type', text(business.businessType || business.type)],
+        ['Contact No.', text(business.contactNo || business.phone)]
+      ];
+    }
+
+    if (type === 'boarding') {
+      const boarding = (details.boarding as AnyRecord | undefined) ?? details;
+      return [
+        ['Property Name', text(boarding.propertyName || boarding.name)],
+        ['Owner / Manager', text(boarding.ownerName || boarding.managerName)],
+        ['Units / Rooms', text(boarding.unitCount || boarding.roomCount)],
+        ['Occupants', String(record.occupantRecords?.length || record.memberCount || 0)]
+      ];
+    }
+
+    const residential = (details.residential as AnyRecord | undefined) ?? details;
+    return [
+      ['Household Head', getResidentName(record)],
+      ['Household Members', String(householdMembers.length)],
+      ['Ownership', text(residential.ownershipStatus || residential.ownership)],
+      ['Years in Barangay', text(residential.yearsInBarangay)]
+    ];
+  }
+
+  function buildAddress(record: Resident) {
+    if (record.address) return record.address;
+    return [record.houseNo, record.street, record.purok, record.zone, 'Barangay Pag-Asa']
+      .filter(Boolean)
+      .join(', ');
   }
 
   function formatDate(ts: { toDate(): Date } | Date | string | null | undefined) {
-    if (!ts) return '—';
-    const d = ts && typeof ts === 'object' && 'toDate' in ts ? ts.toDate() : new Date(ts as string | Date);
-    return d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
+    if (!ts) return 'Not provided';
+    const date = typeof ts === 'object' && 'toDate' in ts ? ts.toDate() : new Date(ts);
+    if (Number.isNaN(date.getTime())) return 'Not provided';
+    return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
   }
 
-  function buildAddress(r: Resident) {
-    if (r?.address) return r.address;
-    return [r?.houseNo, r?.street, r?.purok, 'Barangay Pag-Asa', 'Olongapo City', 'Zambales']
-      .filter(Boolean).join(', ');
+  function text(value: unknown) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
   }
 
-  function getCategories(r: Resident) {
-    const cats: { label: string; color: string }[] = [];
-    if (r?.isPWD)          cats.push({ label: 'PWD',              color: 'amber'   });
-    if (r?.isSenior)       cats.push({ label: 'Senior Citizen',   color: 'emerald' });
-    if (r?.isSingleParent) cats.push({ label: 'Single Parent',    color: 'violet'  });
-    if (!cats.length)      cats.push({ label: 'Regular Resident', color: 'blue'    });
-    return cats;
+  function numberValue(value: unknown) {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+    return undefined;
   }
 
-  const catColors: Record<string, string> = {
-    amber:   'bg-amber-100 text-amber-700 border border-amber-200',
-    emerald: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
-    violet:  'bg-violet-100 text-violet-700 border border-violet-200',
-    blue:    'bg-blue-100 text-blue-700 border border-blue-200',
-  };
+  function display(value: unknown) {
+    const clean = text(value);
+    return clean || 'Not provided';
+  }
 
-  const proofBorder: Record<string, string> = {
-    amber:   'border-amber-200 bg-amber-50',
-    emerald: 'border-emerald-200 bg-emerald-50',
-    violet:  'border-violet-200 bg-violet-50',
-  };
+  function yesNo(value: boolean | undefined) {
+    return value ? 'Yes' : 'No';
+  }
 
-  const proofLabel: Record<string, string> = {
-    amber:   'text-amber-700 bg-amber-100 border-amber-200',
-    emerald: 'text-emerald-700 bg-emerald-100 border-emerald-200',
-    violet:  'text-violet-700 bg-violet-100 border-violet-200',
-  };
+  function capitalize(value: string) {
+    if (!value) return '';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
 
-  const statusHero: Record<string, string> = {
-    pending:  'bg-amber-400/20 text-amber-200 border border-amber-300/30',
-    approved: 'bg-green-400/20 text-green-200 border border-green-300/30',
-    declined: 'bg-red-400/20 text-red-200 border border-red-300/30',
-  };
+  function selectMember(index: number) {
+    selectedMemberIndex = index;
+  }
+
+  function backToHousehold() {
+    selectedMemberIndex = null;
+  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
 
-<!-- ══════════════════ PROFILE MODAL ══════════════════════════ -->
 {#if resident}
-  <!-- Backdrop - REMOVED the on:click handler -->
-  <div class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"></div>
+  <div class="fixed inset-0 z-40 bg-slate-950/55 backdrop-blur-sm"></div>
 
-  <!-- Modal -->
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-    <div class="w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto"
-      style="max-height: 92vh;">
-
-      <!-- Modal header -->
-      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
-        <div class="flex items-center gap-2">
-          <div class="w-2 h-2 rounded-full bg-blue-600"></div>
-          <p class="text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Resident Profile</p>
-        </div>
-        <button type="button" on:click={() => dispatch('close')}
-          class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-all">
-          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-          </svg>
-        </button>
-      </div>
-
-      <!-- Body: two columns -->
-      <div class="flex overflow-hidden flex-1 min-h-0">
-
-        <!-- ── LEFT: scrollable details ── -->
-        <div class="w-[52%] flex flex-col overflow-y-auto">
-
-          <!-- Hero card -->
-          <div class="shrink-0 p-6" style="background: linear-gradient(135deg, #0f2060 0%, #1a4fa0 100%);">
-            <div class="flex items-start gap-4">
-              <div class="w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-extrabold text-xl shrink-0 shadow-inner">
-                {getInitials(resident)}
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-start justify-between gap-2">
-                  <div>
-                    <h2 class="text-white font-extrabold text-xl leading-tight">
-                      {resident.firstName ?? ''} {resident.lastName ?? resident.name}
-                    </h2>
-                    {#if resident.middleName}
-                      <p class="text-white/50 text-xs mt-0.5">{resident.middleName}</p>
-                    {/if}
-                  </div>
-                  <span class="flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full shrink-0 {statusHero[resident.status ?? 'pending']}">
-                    {#if resident.status === 'approved'}✓{:else if resident.status === 'declined'}✗{:else}⏳{/if}
-                    {(resident.status ?? 'pending').charAt(0).toUpperCase() + (resident.status ?? 'pending').slice(1)}
-                  </span>
-                </div>
-                <div class="flex flex-wrap gap-1.5 mt-3">
-                  {#each getCategories(resident) as cat (cat.label)}
-                    <span class="text-[0.65rem] font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/20">
-                      {cat.label}
-                    </span>
-                  {/each}
-                  {#if resident.isPWD && resident.pwdType}
-                    <span class="text-[0.65rem] font-bold px-2.5 py-0.5 rounded-full bg-white/10 text-white/70 border border-white/10">
-                      {resident.pwdType}
-                    </span>
-                  {/if}
-                </div>
-                <p class="text-white/50 text-xs mt-2">
-                  {[resident.zone, resident.purok].filter(Boolean).join(' — ')}
-                </p>
-              </div>
-            </div>
-
-            <!-- Quick stats -->
-            <div class="grid grid-cols-3 divide-x divide-white/10 mt-5 pt-4 border-t border-white/10">
-              <div class="text-center px-2">
-                <p class="text-white/40 text-[0.6rem] font-bold uppercase tracking-widest">Age</p>
-                <p class="text-white font-extrabold text-lg leading-tight">{resident.age ?? '—'}</p>
-              </div>
-              <div class="text-center px-2">
-                <p class="text-white/40 text-[0.6rem] font-bold uppercase tracking-widest">Sex</p>
-                <p class="text-white font-extrabold text-base leading-tight">{resident.sex ?? '—'}</p>
-              </div>
-              <div class="text-center px-2">
-                <p class="text-white/40 text-[0.6rem] font-bold uppercase tracking-widest">Civil Status</p>
-                <p class="text-white font-extrabold text-sm leading-tight">{resident.civilStatus ?? '—'}</p>
-              </div>
-            </div>
+  <div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5">
+    <section
+      class="pointer-events-auto flex h-[94vh] w-[97vw] max-w-7xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl"
+      aria-label="Resident profile modal"
+    >
+      <header class="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs font-extrabold uppercase tracking-[0.24em] text-blue-700">
+              Household Profile
+            </p>
+            <span
+              class="rounded-full border px-2.5 py-1 text-xs font-bold {statusStyles[
+                resident.status ?? 'pending'
+              ]}"
+            >
+              {capitalize(resident.status ?? 'pending')}
+            </span>
           </div>
+          <h2 class="mt-1 truncate text-xl font-extrabold text-slate-900">
+            {getResidentName(resident)}
+          </h2>
+        </div>
 
-          <!-- Details list -->
-          <div class="divide-y divide-slate-100 flex-1">
+        <div class="flex items-center gap-2">
+          {#if resident.status === 'pending'}
+            <button
+              type="button"
+              on:click={() => openConfirm('approve')}
+              class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              on:click={() => openConfirm('decline')}
+              class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-rose-700"
+            >
+              Decline
+            </button>
+          {/if}
+          <button
+            type="button"
+            on:click={() => dispatch('close')}
+            class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
+            aria-label="Close resident profile"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </header>
 
-            <!-- Age -->
-            <div class="flex items-center gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      {#if selectedMember}
+        <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
+          <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 lg:grid-cols-[1fr_390px]">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <button
+                type="button"
+                on:click={backToHousehold}
+                class="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-              </div>
-              <div>
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Age</p>
-                <p class="text-sm font-bold text-slate-700">{resident.age} years old</p>
-                {#if resident.birthdate}<p class="text-xs text-slate-400">{resident.birthdate}</p>{/if}
-              </div>
-            </div>
+                Household
+              </button>
 
-            <!-- Contact -->
-            {#if resident.contactNo}
-              <div class="flex items-center gap-4 px-6 py-4">
-                <div class="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
-                  <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498A1 1 0 0121 15.72V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
-                  </svg>
-                </div>
+              <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
                 <div>
-                  <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Contact Number</p>
-                  <p class="text-sm font-bold text-slate-700">{resident.contactNo}</p>
-                </div>
-              </div>
-            {/if}
-
-            <!-- Address -->
-            <div class="flex items-start gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 mt-0.5">
-                <svg class="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                </svg>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Address</p>
-                <p class="text-sm font-bold text-slate-700 leading-snug">{buildAddress(resident)}</p>
-              </div>
-            </div>
-
-            <!-- Citizenship -->
-{#if resident.citizenship && resident.citizenship !== 'Filipino'}
-  <div class="flex items-center gap-4 px-6 py-4">
-    <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center shrink-0">
-      <svg class="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-    </div>
-    <div>
-      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Citizenship</p>
-      <p class="text-sm font-bold text-slate-700">{resident.citizenship}</p>
-    </div>
-  </div>
-{/if}
-
-<!-- Place of Birth -->
-{#if resident.placeOfBirth}
-  <div class="flex items-center gap-4 px-6 py-4">
-    <div class="w-9 h-9 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
-      <svg class="w-4 h-4 text-teal-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-    </div>
-    <div>
-      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Place of Birth</p>
-      <p class="text-sm font-bold text-slate-700">{resident.placeOfBirth}</p>
-    </div>
-  </div>
-{/if}
-
-<!-- Occupation -->
-{#if resident.occupation}
-  <div class="flex items-center gap-4 px-6 py-4">
-    <div class="w-9 h-9 rounded-xl bg-cyan-50 flex items-center justify-center shrink-0">
-      <svg class="w-4 h-4 text-cyan-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-      </svg>
-    </div>
-    <div>
-      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Occupation</p>
-      <p class="text-sm font-bold text-slate-700">{resident.occupation}</p>
-    </div>
-  </div>
-{/if}
-
-<!-- Extension Name -->
-{#if resident.extensionName}
-  <div class="flex items-center gap-4 px-6 py-4">
-    <div class="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-      <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-      </svg>
-    </div>
-    <div>
-      <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Name Extension</p>
-      <p class="text-sm font-bold text-slate-700">{resident.extensionName}</p>
-    </div>
-  </div>
-{/if}
-
-            <!-- GPS -->
-            <div class="flex items-center gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-              </div>
-              <div class="flex-1">
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">GPS Coordinates</p>
-                {#if resident.lat && resident.lng}
-                  <p class="text-sm font-bold text-slate-700 font-mono">
-                    {resident.lat.toFixed(4)}°N,  {resident.lng.toFixed(4)}°E
+                  <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Member Information
                   </p>
-                  {#if resident.gpsAccuracy}
-                    <p class="text-xs text-slate-400">±{Math.round(resident.gpsAccuracy)}m accuracy</p>
-                  {/if}
-                {:else}
-                  <p class="text-xs text-slate-300 italic font-semibold">Not captured</p>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Category -->
-            <div class="flex items-center gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-                </svg>
-              </div>
-              <div>
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Category</p>
-                <div class="flex flex-wrap gap-1.5 mt-1">
-                  {#each getCategories(resident) as cat (cat.label)}
-                    <span class="text-xs font-bold px-2.5 py-0.5 rounded-full {catColors[cat.color]}">{cat.label}</span>
-                  {/each}
-                </div>
-                {#if resident.isPWD && resident.pwdType}
-                  <p class="text-xs text-slate-400 mt-1">Type: {resident.pwdType}</p>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Date Registered -->
-            <div class="flex items-center gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-                </svg>
-              </div>
-              <div>
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Date Registered</p>
-                <p class="text-sm font-bold text-slate-700">{formatDate(resident.submittedAt)}</p>
-              </div>
-            </div>
-
-            <!-- QR Code Created By (for QR-registered residents) -->
-            {#if resident.householdId && !resident.encodedBy}
-              <div class="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
-                <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-                  <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 4h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
-                  </svg>
-                </div>
-                <div class="flex-1">
-                  <p class="text-[0.6rem] font-bold uppercase tracking-widest text-blue-600">QR Code Created By</p>
-                  {#if loadingStaff}
-                    <p class="text-sm font-bold text-slate-500 flex items-center gap-2">
-                      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-                      </svg>
-                      Loading staff info...
-                    </p>
-                  {:else if qrStaffName}
-                    <p class="text-sm font-bold text-slate-700">
-                      {qrStaffName}
-                    </p>
-                    {#if householdInfo?.houseNo}
-                      <p class="text-xs text-slate-500 mt-0.5">
-                        House No. {householdInfo.houseNo} • QR: {householdInfo.qrId}
-                      </p>
+                  <h3 class="mt-1 text-2xl font-extrabold text-slate-900">{selectedMember.fullName}</h3>
+                  <p class="mt-1 text-sm font-semibold text-slate-500">
+                    {selectedMember.role}
+                    {#if selectedMember.relationship}
+                      - {selectedMember.relationship}
                     {/if}
-                  {:else}
-                    <p class="text-sm font-medium text-slate-500 italic">Staff information unavailable</p>
-                  {/if}
+                  </p>
                 </div>
-                {#if householdInfo?.qrId}
-                  <div class="text-right shrink-0">
-                    <span class="text-[0.6rem] font-mono font-bold text-blue-500 bg-blue-100 px-2 py-1 rounded-lg">
-                      {householdInfo.qrId}
+                <div class="flex flex-wrap gap-2">
+                  {#if selectedMember.isPWD}
+                    <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-700">
+                      PWD{selectedMember.pwdType ? ` - ${selectedMember.pwdType}` : ''}
                     </span>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-
-            <!-- Submitted By (Staff or Self) -->
-            <div class="flex items-center gap-4 px-6 py-4">
-              <div class="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                </svg>
-              </div>
-              <div>
-                <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400">Submitted By</p>
-                <p class="text-sm font-bold text-slate-700">
-                  {#if resident.encodedBy}
-                    {resident.encodedBy} (Staff)
-                  {:else if resident.householdId}
-                    <span class="text-green-600">✓ Self-registered via QR</span>
-                    {#if qrStaffName}
-                      <span class="text-xs text-slate-500 block mt-0.5">QR generated by: {qrStaffName}</span>
-                    {/if}
-                  {:else}
-                    <span class="text-slate-400 font-normal italic">Self-registered via QR</span>
                   {/if}
-                </p>
+                  {#if selectedMember.isSenior}
+                    <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                      Senior Citizen
+                    </span>
+                  {/if}
+                  {#if selectedMember.isSingleParent}
+                    <span class="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">
+                      Single Parent
+                    </span>
+                  {/if}
+                </div>
               </div>
-            </div>
 
-            <!-- House Photo -->
-            <div class="px-6 py-4">
-              <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
-                House Photo
-              </p>
-              {#if resident.photoUrl}
-                <button type="button"
-                  on:click={() => openLightbox(resident!.photoUrl ?? '', `🏠 ${resident!.firstName ?? ''} ${resident!.lastName ?? resident!.name} — House Photo`)}
-                  class="w-full relative rounded-xl overflow-hidden border border-slate-200 group cursor-zoom-in">
-                  <img src={resident.photoUrl} alt="House" class="w-full h-44 object-cover group-hover:brightness-90 transition-all" />
-                  <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                    <span class="bg-black/50 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-sm">🔍 Tap to enlarge</span>
+              <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Age</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.age)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Birthdate</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.birthdate)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Sex</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.sex)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Civil Status</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.civilStatus)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Contact No.</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.contactNo)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Email</p>
+                  <p class="mt-1 break-words text-sm font-bold text-slate-800">{display(selectedMember.email)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Occupation</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.occupation)}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Vaccination</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">
+                    {display(selectedMember.vaccinationStatus)}
+                  </p>
+                </div>
+                <div class="rounded-xl border border-slate-200 p-3">
+                  <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Blood Type</p>
+                  <p class="mt-1 text-sm font-bold text-slate-800">{display(selectedMember.bloodType)}</p>
+                </div>
+              </div>
+
+              <div class="mt-4 rounded-xl border border-slate-200 p-3">
+                <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Health Notes</p>
+                <p class="mt-1 text-sm font-semibold text-slate-700">{display(selectedMember.medicalNotes)}</p>
+              </div>
+
+              {#if selectedProofImages.length}
+                <div class="mt-5">
+                  <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Submitted Proofs
+                  </p>
+                  <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                    {#each selectedProofImages as proof (proof.label)}
+                      {#if proof.submitted && proof.src}
+                        <button
+                          type="button"
+                          on:click={() => openLightbox(proof.src ?? '', proof.label)}
+                          class="overflow-hidden rounded-xl border text-left {proofStyles[proof.tone]}"
+                        >
+                          <div class="flex items-center justify-between gap-2 px-3 py-2 text-xs font-extrabold uppercase tracking-wider">
+                            <span>{proof.label}</span>
+                            <span class="rounded-full bg-white/80 px-2 py-0.5 text-[0.6rem]">View</span>
+                          </div>
+                          <img src={proof.src} alt={proof.label} class="h-36 w-full object-cover" />
+                        </button>
+                      {:else}
+                        <div class="rounded-xl border p-4 {proofStyles[proof.tone]}">
+                          <p class="text-xs font-extrabold uppercase tracking-wider">{proof.label}</p>
+                          <div class="mt-4 flex h-24 items-center justify-center rounded-lg border border-dashed border-current/30 bg-white/55 text-center">
+                            <p class="text-xs font-bold">No proof image submitted</p>
+                          </div>
+                        </div>
+                      {/if}
+                    {/each}
                   </div>
-                  <div class="absolute bottom-2 left-2 bg-black/50 text-white text-[0.65rem] font-bold px-2 py-1 rounded-lg">
-                    📍 {resident.address?.split(',')[0] ?? 'House Photo'}
-                  </div>
-                </button>
+                </div>
               {:else}
-                <div class="w-full h-32 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
-                  <svg class="w-8 h-8 mb-1" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                  <p class="text-xs font-semibold">No house photo submitted</p>
+                <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Submitted Proofs
+                  </p>
+                  <p class="mt-2 text-sm font-semibold text-slate-500">
+                    This member has no PWD, Senior Citizen, or Single Parent proof requirement recorded.
+                  </p>
                 </div>
               {/if}
+            </section>
+
+            <aside class="flex min-h-[360px] flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div class="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Members
+                  </p>
+                  <p class="text-sm font-bold text-slate-800">
+                    Showing {visibleMembers.length} of {householdMembers.length}
+                  </p>
+                </div>
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    on:click={() => (memberPage = Math.max(0, memberPage - 1))}
+                    disabled={memberPage === 0}
+                    class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-35"
+                    aria-label="Previous members"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    on:click={() => (memberPage = Math.min(pageCount - 1, memberPage + 1))}
+                    disabled={memberPage >= pageCount - 1}
+                    class="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 disabled:opacity-35"
+                    aria-label="Next members"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="mt-3 space-y-2">
+                {#each visibleMembers as item (item.index)}
+                  <button
+                    type="button"
+                    on:click={() => selectMember(item.index)}
+                    class="w-full rounded-xl border p-3 text-left transition {selectedMemberIndex === item.index
+                      ? 'border-blue-300 bg-blue-50'
+                      : 'border-slate-200 bg-white hover:bg-slate-50'}"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-extrabold text-slate-800">{item.member.fullName}</p>
+                        <p class="text-xs font-semibold text-slate-500">{item.member.role}</p>
+                      </div>
+                      <span class="rounded-full bg-slate-100 px-2 py-1 text-[0.65rem] font-bold text-slate-500">
+                        #{item.index + 1}
+                      </span>
+                    </div>
+                  </button>
+                {/each}
+              </div>
+
+              <div class="mt-auto pt-4 text-center text-xs font-semibold text-slate-400">
+                Page {memberPage + 1} of {pageCount}
+              </div>
+            </aside>
+          </div>
+
+          <section class="shrink-0 border-t border-slate-200 bg-white p-4">
+            <div class="grid gap-4 lg:grid-cols-[1fr_300px]">
+              <div class="h-64 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                {#if mapSrc}
+                  <iframe
+                    src={mapSrc}
+                    title="Household location"
+                    class="h-full w-full border-0"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                  ></iframe>
+                {:else}
+                  <div class="flex h-full items-center justify-center text-sm font-bold text-slate-400">
+                    No GPS location captured
+                  </div>
+                {/if}
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 p-4">
+                <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                  Location
+                </p>
+                <p class="mt-2 text-sm font-bold text-slate-800">{display(buildAddress(resident))}</p>
+                <p class="mt-2 text-xs font-semibold text-slate-500">
+                  Lat: {display(resident.lat)} / Lng: {display(resident.lng)}
+                </p>
+              </div>
             </div>
+          </section>
+        </div>
+      {:else}
+        <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[470px_1fr]">
+          <section class="flex min-h-0 flex-col border-r border-slate-200 bg-white">
+            <div class="overflow-y-auto p-5">
+              <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-blue-700">
+                  1. House Profile Info
+                </p>
+                <div class="mt-4 grid gap-3">
+                  <div>
+                    <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Type</p>
+                    <p class="text-sm font-extrabold text-slate-800">{getProfileType(resident)}</p>
+                  </div>
+                  <div>
+                    <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Address</p>
+                    <p class="text-sm font-bold text-slate-700">{display(buildAddress(resident))}</p>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Purok</p>
+                      <p class="text-sm font-bold text-slate-700">{display(resident.purok)}</p>
+                    </div>
+                    <div>
+                      <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Zone</p>
+                      <p class="text-sm font-bold text-slate-700">{display(resident.zone)}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Landmark</p>
+                    <p class="text-sm font-bold text-slate-700">{display(resident.landmark)}</p>
+                  </div>
+                </div>
 
+                <div class="mt-4 grid gap-2 border-t border-slate-200 pt-4">
+                  {#each getPrimaryDetails(resident) as detail (`${detail[0]}-${detail[1]}`)}
+                    <div class="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+                      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        {detail[0]}
+                      </span>
+                      <span class="text-right text-sm font-extrabold text-slate-700">{display(detail[1])}</span>
+                    </div>
+                  {/each}
+                </div>
 
-<!-- Decline Email Modal -->
+                <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                  <div class="rounded-xl bg-white p-3">
+                    <p class="font-bold uppercase tracking-wider text-slate-400">Terms</p>
+                    <p class="mt-1 font-extrabold text-slate-700">{yesNo(resident.termsAccepted)}</p>
+                  </div>
+                  <div class="rounded-xl bg-white p-3">
+                    <p class="font-bold uppercase tracking-wider text-slate-400">Submitted</p>
+                    <p class="mt-1 font-extrabold text-slate-700">{formatDate(resident.submittedAt)}</p>
+                  </div>
+                </div>
+
+                {#if resident.householdId}
+                  <div class="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <div class="flex items-start justify-between gap-3">
+                      <div>
+                        <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-600">
+                          QR Created By
+                        </p>
+                        {#if loadingStaff}
+                          <p class="mt-1 text-sm font-extrabold text-slate-500">Loading staff info...</p>
+                        {:else}
+                          <p class="mt-1 text-sm font-extrabold text-slate-800">
+                            {display(qrStaffName)}
+                          </p>
+                        {/if}
+                      </div>
+                      {#if householdInfo?.qrId || resident.qrId}
+                        <span class="rounded-lg bg-white px-2.5 py-1 text-[0.65rem] font-extrabold text-blue-700">
+                          {householdInfo?.qrId || resident.qrId}
+                        </span>
+                      {/if}
+                    </div>
+                    {#if householdInfo?.houseNo}
+                      <p class="mt-2 text-xs font-semibold text-blue-700/70">
+                        Household record: House No. {householdInfo.houseNo}
+                      </p>
+                    {/if}
+                  </div>
+                {/if}
+
+                {#if resident.photoUrl}
+                  <button
+                    type="button"
+                    on:click={() => openLightbox(resident!.photoUrl ?? '', 'House Photo')}
+                    class="mt-4 block w-full overflow-hidden rounded-2xl border border-slate-200"
+                  >
+                    <img src={resident.photoUrl} alt="House" class="h-40 w-full object-cover" />
+                  </button>
+                {/if}
+              </div>
+
+              <div class="mt-4 rounded-2xl border border-slate-200 bg-white">
+                <div class="border-b border-slate-100 px-4 py-3">
+                  <p class="text-xs font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Member List
+                  </p>
+                  <p class="text-sm font-bold text-slate-800">
+                    Family head and members ({householdMembers.length})
+                  </p>
+                </div>
+
+                <div class="divide-y divide-slate-100">
+                  {#each householdMembers as member, index (member.id)}
+                    <button
+                      type="button"
+                      on:click={() => selectMember(index)}
+                      class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-blue-50"
+                    >
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-extrabold text-slate-800">{member.fullName}</p>
+                        <p class="text-xs font-semibold text-slate-500">
+                          {member.role}{member.age ? ` - ${member.age} yrs old` : ''}
+                        </p>
+                      </div>
+                      <svg class="h-4 w-4 shrink-0 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="flex min-h-0 flex-col bg-slate-50 p-5">
+            <div
+              class="flex flex-1 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 p-8 text-center"
+            >
+              <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+                <svg class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m6-6a4 4 0 11-8 0 4 4 0 018 0zm6 2a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <h3 class="mt-4 text-lg font-extrabold text-slate-700">Member detail panel</h3>
+              <p class="mt-2 max-w-md text-sm font-semibold text-slate-400">
+                Select a household member from the list to show their information. Other modal tools are disabled for now.
+              </p>
+            </div>
+          </section>
+        </div>
+      {/if}
+    </section>
+  </div>
+{/if}
+
 {#if showDeclineEmailModal && currentResidentForDecline}
   <DeclineEmailModal
     resident={currentResidentForDecline}
     householdId={currentResidentForDecline.householdId || ''}
-    on:close={() => showDeclineEmailModal = false}
+    on:close={() => (showDeclineEmailModal = false)}
     on:emailSent={handleDeclineEmailSent}
   />
 {/if}
 
-            <!-- ══ SECTOR ID PROOF IMAGES ══════════════════════════════ -->
-{#if proofImages.length > 0}
-  <div class="px-6 py-4 space-y-4">
-    <p class="text-[0.6rem] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>
-      </svg>
-      Sector ID Proofs
-    </p>
-
-    {#each proofImages as proof (proof.label)}
-      <div class="rounded-xl border {proofBorder[proof.color]} overflow-hidden">
-        <div class="flex items-center gap-2 px-3 py-2 border-b {proofBorder[proof.color]}">
-          <span class="text-base leading-none">{proof.icon}</span>
-          <span class="text-[0.65rem] font-extrabold uppercase tracking-wider {proofLabel[proof.color]} px-2 py-0.5 rounded-full border">
-            {proof.label}
-          </span>
-        </div>
-
-        {#if proof.hasProof && proof.src}
-          <button type="button"
-            on:click={() => openLightbox(proof.src, `${proof.icon} ${proof.label}`)}
-            class="w-full relative group cursor-zoom-in block">
-            <img
-              src={proof.src}
-              alt={proof.label}
-              class="w-full h-36 object-cover group-hover:brightness-90 transition-all"
-            />
-            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-              <span class="bg-black/50 text-white text-xs font-bold px-4 py-2 rounded-full backdrop-blur-sm">
-                🔍 Tap to enlarge
-              </span>
-            </div>
-          </button>
-        {:else}
-          <!-- Show message when resident is in sector but no proof uploaded -->
-          <div class="w-full h-28 flex flex-col items-center justify-center gap-1.5 text-slate-300 bg-slate-50">
-            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <p class="text-xs font-semibold text-slate-400">No proof submitted</p>
-            <p class="text-[0.65rem] text-slate-300">Document was not uploaded</p>
-          </div>
-        {/if}
-      </div>
-    {/each}
-  </div>
-{/if}
-          </div>
-        </div>
-
-        <!-- ── RIGHT: map + actions ── -->
-        <div class="w-[48%] flex flex-col border-l border-slate-100 bg-slate-50">
-
-          <!-- Map label -->
-          <div class="px-5 py-4 border-b border-slate-100 bg-white shrink-0">
-            <div class="flex items-center gap-2">
-              <svg class="w-4 h-4 text-rose-500" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1112 6a2.5 2.5 0 010 5.5z"/>
-              </svg>
-              <p class="text-[0.65rem] font-extrabold tracking-widest text-slate-400 uppercase">Location on Map</p>
-            </div>
-          </div>
-
-          <!-- Map iframe -->
-          <div class="flex-1 relative min-h-0">
-            {#if mapSrc}
-              <iframe src={mapSrc} title="Resident location"
-                class="w-full h-full border-0" loading="lazy"
-                referrerpolicy="no-referrer-when-downgrade"></iframe>
-              <div class="absolute top-3 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 border border-slate-200 pointer-events-none whitespace-nowrap">
-                📍 {resident.firstName ?? resident.name?.split(' ')[0] ?? ''} {resident.lastName ?? ''}
-              </div>
-            {:else}
-              <div class="w-full h-full flex flex-col items-center justify-center text-slate-300 gap-3 p-8">
-                <div class="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center">
-                  <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                </div>
-                <div class="text-center">
-                  <p class="text-sm font-bold text-slate-400">No GPS data</p>
-                  <p class="text-xs text-slate-300 mt-1">Location was not captured during registration</p>
-                </div>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Zone label -->
-          {#if resident.zone || resident.purok}
-            <div class="px-5 py-3 bg-white border-t border-slate-100 shrink-0">
-              <span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
-                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                </svg>
-                {[resident.zone, resident.purok].filter(Boolean).join(' — ')}
-              </span>
-            </div>
-          {/if}
-
-          <!-- Action buttons - REMOVED the "Back" button -->
-          <div class="px-5 py-4 border-t border-slate-100 bg-white shrink-0 space-y-2">
-
-            {#if resident.status === 'pending'}
-              <div class="flex gap-2">
-                <button type="button" on:click={() => openConfirm('approve')}
-                  class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-green-500 hover:bg-green-600 transition-all active:scale-95 flex items-center justify-center gap-1.5">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                  </svg>
-                  Approve
-                </button>
-                <button type="button" on:click={() => openConfirm('decline')}
-                  class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center gap-1.5">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                  Decline
-                </button>
-              </div>
-            {/if}
-
-            <div class="flex gap-2">
-              <button type="button"
-                class="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border-2 transition-all active:scale-95"
-                style="color:#0f2060; border-color:#0f2060; background:white;">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
-                Report
-              </button>
-              <button type="button" on:click={() => window.print()}
-                class="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border-2 border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                </svg>
-                Print
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
-
-<!-- ══════════════════ PHOTO LIGHTBOX ═════════════════════════ -->
 {#if showPhotoLightbox && lightboxSrc}
-  <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-sm"
-    on:click={() => { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }}>
-    <div class="relative max-w-lg w-full mx-4" on:click|stopPropagation>
-      <img src={lightboxSrc} alt={lightboxLabel}
-        class="w-full rounded-2xl shadow-2xl max-h-[80vh] object-cover" />
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+    role="button"
+    tabindex="0"
+    on:click={handleLightboxBackdrop}
+    on:keydown={(event) => event.key === 'Escape' && closeLightbox()}
+  >
+    <div class="relative max-h-[88vh] w-full max-w-3xl">
+      <img src={lightboxSrc} alt={lightboxLabel} class="max-h-[88vh] w-full rounded-2xl object-contain shadow-2xl" />
       <button
-        on:click={() => { showPhotoLightbox = false; lightboxSrc = ''; lightboxLabel = ''; }}
-        class="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-all">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        type="button"
+        on:click={closeLightbox}
+        class="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
+        aria-label="Close image preview"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
       {#if lightboxLabel}
-        <div class="absolute bottom-3 left-3 bg-black/50 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+        <div class="absolute bottom-3 left-3 rounded-xl bg-black/60 px-3 py-2 text-xs font-bold text-white">
           {lightboxLabel}
         </div>
       {/if}
@@ -828,42 +1013,51 @@ async function confirmAction() {
   </div>
 {/if}
 
-<!-- ══════════════════ CONFIRM MODAL ══════════════════════════ -->
 {#if confirmModal.open}
-  <div class="fixed inset-0 z-[70] flex items-center justify-center px-4"
-    style="background:rgba(15,32,96,0.6);backdrop-filter:blur(4px);">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center">
-      <div class="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4
-                  {confirmModal.action === 'approve' ? 'bg-green-100' : 'bg-red-100'}">
+  <div class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+    <div class="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+      <div
+        class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full {confirmModal.action ===
+        'approve'
+          ? 'bg-emerald-100 text-emerald-600'
+          : 'bg-rose-100 text-rose-600'}"
+      >
         {#if confirmModal.action === 'approve'}
-          <svg class="w-7 h-7 text-green-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         {:else}
-          <svg class="w-7 h-7 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          <svg class="h-7 w-7" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         {/if}
       </div>
-      <h3 class="font-nunito font-extrabold text-slate-700 text-lg mb-1">
+      <h3 class="text-lg font-extrabold text-slate-800">
         {confirmModal.action === 'approve' ? 'Approve Resident?' : 'Decline Resident?'}
       </h3>
-      <p class="text-sm text-slate-500 font-semibold mb-1">{resident?.name}</p>
-      <p class="text-sm text-slate-400 mb-5">
+      <p class="mt-1 text-sm font-semibold text-slate-500">{resident?.name || resident?.firstName}</p>
+      <p class="mt-3 text-sm text-slate-400">
         {confirmModal.action === 'approve'
-          ? 'This resident will be marked as approved and added to the records.'
-          : 'This submission will be declined and removed from the queue.'}
+          ? 'This registration will be marked as approved.'
+          : 'This registration will be marked as declined.'}
       </p>
-      <div class="flex gap-3">
-        <button type="button"
-          on:click={() => confirmModal = { open: false, action: 'approve' }}
-          class="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+      <div class="mt-5 flex gap-3">
+        <button
+          type="button"
+          on:click={() => (confirmModal = { open: false, action: 'approve' })}
+          class="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-200"
+        >
           Cancel
         </button>
-        <button type="button" on:click={confirmAction}
-          class="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-colors
-                 {confirmModal.action === 'approve' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}">
-          {confirmModal.action === 'approve' ? 'Yes, Approve' : 'Yes, Decline'}
+        <button
+          type="button"
+          on:click={confirmAction}
+          class="flex-1 rounded-xl py-2.5 text-sm font-bold text-white transition {confirmModal.action ===
+          'approve'
+            ? 'bg-emerald-600 hover:bg-emerald-700'
+            : 'bg-rose-600 hover:bg-rose-700'}"
+        >
+          Confirm
         </button>
       </div>
     </div>

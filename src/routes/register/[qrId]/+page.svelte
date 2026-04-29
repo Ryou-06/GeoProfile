@@ -431,13 +431,11 @@
     });
   }
 
-  async function compressImage(file: File): Promise<string | null> {
+  async function compressImage(file: File, maxW = 1200, maxH = 900, quality = 0.8): Promise<string | null> {
     return new Promise((resolve) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       img.onload = () => {
-        const maxW = 1200;
-        const maxH = 900;
         let w = img.width;
         let h = img.height;
         if (w > maxW) {
@@ -453,11 +451,26 @@
         canvas.height = h;
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
         URL.revokeObjectURL(objectUrl);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        resolve(canvas.toDataURL('image/jpeg', quality));
       };
-      img.onerror = () => resolve(null);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(null);
+      };
       img.src = objectUrl;
     });
+  }
+
+  async function readProofImage(file: File | null) {
+    if (!file) return null;
+    const compressed = await compressImage(file, 720, 720, 0.62);
+    if (compressed) return compressed;
+
+    const fallback = await readFileAsBase64(file);
+    if (fallback && fallback.length > 850_000) {
+      throw new Error('Proof image is too large for upload. Please use a screenshot or smaller photo.');
+    }
+    return fallback;
   }
 
   function personIsValid(person: PersonProfile, label: string) {
@@ -554,9 +567,14 @@
   }
 
   async function serializeProofs(person: PersonProfile) {
+    const pwdProof = person.isPWD ? await readProofImage(person.pwdProof) : null;
+    const seniorProof = isSenior(person) ? await readProofImage(person.seniorProof) : null;
+
     return {
-      pwdProof: person.isPWD ? await readFileAsBase64(person.pwdProof) : null,
-      seniorProof: isSenior(person) ? await readFileAsBase64(person.seniorProof) : null
+      pwdProof,
+      pwdIdProof: pwdProof,
+      seniorProof,
+      seniorIdProof: seniorProof
     };
   }
 
@@ -587,11 +605,19 @@
       const motherProofs = await serializeProofs(mother);
       const memberProfiles = [];
       for (const member of members) {
-        memberProfiles.push({ ...serializePerson(member), relationship: member.relationship.trim(), proofs: await serializeProofs(member) });
+        const memberProofs = await serializeProofs(member);
+        memberProfiles.push({
+          ...serializePerson(member),
+          ...memberProofs,
+          relationship: member.relationship.trim(),
+          proofs: memberProofs
+        });
       }
 
       const primary = headOfFamily ?? createPerson();
       const primaryName = primary.fullName.trim() || businessInfo.ownerName.trim() || boardingInfo.ownerName.trim() || 'Household Profile';
+      const primaryProofs = await serializeProofs(primary);
+      const soloParentProofValue = isSingleParentHousehold ? await readProofImage(singleParentProof) : null;
 
       await addDoc(collection(db, 'residents'), {
         householdId: household?.id ?? null,
@@ -614,14 +640,15 @@
         address: fullAddress,
         familySetup,
         parents: {
-          father: fatherStatus === 'present' ? { ...serializePerson(father), status: fatherStatus, proofs: fatherProofs } : { status: fatherStatus },
-          mother: motherStatus === 'present' ? { ...serializePerson(mother), status: motherStatus, proofs: motherProofs } : { status: motherStatus }
+          father: fatherStatus === 'present' ? { ...serializePerson(father), ...fatherProofs, status: fatherStatus, proofs: fatherProofs } : { status: fatherStatus },
+          mother: motherStatus === 'present' ? { ...serializePerson(mother), ...motherProofs, status: motherStatus, proofs: motherProofs } : { status: motherStatus }
         },
         familyMembers: memberProfiles,
         occupantRecords: householdType === 'boarding' ? memberProfiles : [],
         memberCount: members.length,
         singleParent: isSingleParentHousehold,
-        singleParentProof: isSingleParentHousehold ? await readFileAsBase64(singleParentProof) : null,
+        singleParentProof: soloParentProofValue,
+        singleParentIdProof: soloParentProofValue,
         firstName: getFirstName(primaryName),
         lastName: getLastName(primaryName),
         name: primaryName,
@@ -633,7 +660,11 @@
         occupation: primary.occupation.trim(),
         contactNo: primary.contactNo.trim(),
         isPWD: primary.isPWD || members.some((member) => member.isPWD),
+        pwdProof: primaryProofs.pwdProof,
+        pwdIdProof: primaryProofs.pwdIdProof,
         isSenior: primaryIsSenior || members.some((member) => isSenior(member)),
+        seniorProof: primaryProofs.seniorProof,
+        seniorIdProof: primaryProofs.seniorIdProof,
         isSingleParent: isSingleParentHousehold,
         lat: gpsLat,
         lng: gpsLng,
@@ -651,7 +682,7 @@
       localStorage.removeItem('last_qr_id');
     } catch (error) {
       console.error(error);
-      errorMsg = 'Submission failed. Please check your internet and try again.';
+      errorMsg = error instanceof Error ? error.message : 'Submission failed. Please check your internet and try again.';
     } finally {
       loading = false;
     }
