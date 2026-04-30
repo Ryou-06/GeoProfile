@@ -2,6 +2,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
+  import { logAuditEvent } from '$lib/audit';
   import { isInsidePagAsa } from '$lib/pagasaBoundary.js';
 
   const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -641,7 +642,7 @@
       const primaryProofs = await serializeProofs(primary);
       const soloParentProofValue = isSingleParentHousehold ? await readProofImage(singleParentProof) : null;
 
-      await addDoc(collection(db, 'residents'), {
+      const residentRef = await addDoc(collection(db, 'residents'), {
         householdId: household?.id ?? null,
         qrId,
         profileKind: 'household-profiling',
@@ -698,6 +699,25 @@
         status: 'pending',
         submittedAt: serverTimestamp(),
         encodedBy: null
+      });
+      await logAuditEvent({
+        action: 'submit_resident_profile',
+        module: 'Residents',
+        description: `Submitted household profile for ${primaryName}`,
+        targetId: residentRef.id,
+        targetLabel: primaryName,
+        actorName: primaryName,
+        actorRole: 'resident',
+        changes: {
+          status: { oldValue: null, newValue: 'pending' }
+        },
+        metadata: {
+          qrId,
+          householdId: household?.id ?? null,
+          householdType,
+          address: fullAddress,
+          memberCount: members.length
+        }
       });
 
       submitted = true;

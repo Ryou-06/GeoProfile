@@ -1,6 +1,7 @@
 <!-- src/routes/signup/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { logAuditEvent } from '$lib/audit';
 
   onMount(async () => {
     try {
@@ -128,6 +129,22 @@
       await setDoc(doc(db, 'usernames', username.toLowerCase().trim()), {
         email: email,
         uid: credential.user.uid,
+      });
+      await logAuditEvent({
+        action: 'create_admin',
+        module: 'Staff Management',
+        description: `Created admin account for ${name.trim()}`,
+        targetId: credential.user.uid,
+        targetLabel: name.trim(),
+        actorId: credential.user.uid,
+        actorName: name.trim(),
+        actorRole: 'admin',
+        actorEmail: email,
+        changes: {
+          role: { oldValue: null, newValue: 'admin' },
+          username: { oldValue: null, newValue: username.toLowerCase().trim() },
+          position: { oldValue: null, newValue: position }
+        }
       });
       
       success = true;

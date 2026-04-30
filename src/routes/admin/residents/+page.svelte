@@ -2,10 +2,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
+  import { logAuditEvent, pickChangedFields } from '$lib/audit';
   import ResidentProfileModal from '$lib/components/ResidentProfileModal.svelte';
 
   type Category = 'Regular' | 'PWD' | 'Senior' | 'Single Parent';
   type Status   = 'pending' | 'approved' | 'declined';
+  type ResidentStatus = 'active' | 'inactive' | 'deceased' | 'abroad' | 'transferred';
 
   interface Resident {
     id: string;
@@ -38,6 +40,7 @@
     qrId?: string;
     houseNo?: string;
     householdType?: string;
+    residentStatus?: ResidentStatus;
   }
 
   let residents: Resident[] = [];
@@ -58,7 +61,8 @@
   let editForm = {
     address: '',
     householdType: '',
-    status: 'approved' as Status
+    status: 'approved' as Status,
+    residentStatus: 'active' as ResidentStatus
   };
   let unsubs: (() => void)[] = [];
 
@@ -138,7 +142,8 @@
     editForm = {
       address: displayAddress(resident),
       householdType: resident.householdType || '',
-      status: resident.status
+      status: resident.status,
+      residentStatus: resident.residentStatus || 'active'
     };
   }
 
@@ -163,10 +168,26 @@
       const updates = {
         address: editForm.address.trim(),
         householdType: editForm.householdType || null,
-        status: editForm.status
+        status: editForm.status,
+        residentStatus: editForm.residentStatus
+      };
+      const before = {
+        address: displayAddress(editResident),
+        householdType: editResident.householdType || null,
+        status: editResident.status,
+        residentStatus: editResident.residentStatus || 'active'
       };
 
       await updateDoc(doc(db, 'residents', editResident.id), updates);
+      await logAuditEvent({
+        action: 'update_resident',
+        module: 'Residents',
+        description: `Updated household record for ${editResident.name || editResident.address || editResident.id}`,
+        targetId: editResident.id,
+        targetLabel: editResident.name || editResident.address || editResident.id,
+        changes: pickChangedFields(before, updates),
+        metadata: { qrId: editResident.qrId }
+      });
 
       residents = residents.map((resident) =>
         resident.id === editResident?.id
@@ -416,6 +437,18 @@
             <option value="approved">Approved</option>
             <option value="pending">Pending</option>
             <option value="declined">Declined</option>
+          </select>
+        </label>
+
+        <label class="block">
+          <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Resident Status</span>
+          <select bind:value={editForm.residentStatus}
+            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="deceased">Deceased</option>
+            <option value="abroad">Abroad</option>
+            <option value="transferred">Transferred / Moved Out</option>
           </select>
         </label>
       </div>

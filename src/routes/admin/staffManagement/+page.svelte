@@ -2,6 +2,7 @@
 <!-- src/routes/admin/staff-management/+page.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { logAuditEvent, pickChangedFields } from '$lib/audit';
 
   // Types
   interface StaffMember {
@@ -247,6 +248,19 @@ async function handleAddStaff() {
       email: email,
       uid: credential.user.uid,
     });
+    await logAuditEvent({
+      action: 'create_staff',
+      module: 'Staff Management',
+      description: `Created staff account for ${newName.trim()}`,
+      targetId: credential.user.uid,
+      targetLabel: newName.trim(),
+      changes: {
+        role: { oldValue: null, newValue: 'staff' },
+        username: { oldValue: null, newValue: newUsername.toLowerCase().trim() },
+        position: { oldValue: null, newValue: newPosition }
+      },
+      metadata: { email }
+    });
     
     // Sign out from temporary auth only
     await signOut(tempAuth);
@@ -311,9 +325,23 @@ async function handleAddStaff() {
 
       if (!selectedStaff) throw new Error('No staff selected');
 
-      await updateDoc(doc(db, 'users', selectedStaff.id), {
+      const before = {
+        name: selectedStaff.name,
+        position: selectedStaff.position
+      };
+      const updates = {
         name: editName.trim(),
         position: editPosition,
+      };
+
+      await updateDoc(doc(db, 'users', selectedStaff.id), updates);
+      await logAuditEvent({
+        action: 'update_staff',
+        module: 'Staff Management',
+        description: `Updated staff account for ${editName.trim()}`,
+        targetId: selectedStaff.id,
+        targetLabel: editName.trim(),
+        changes: pickChangedFields(before, updates)
       });
 
       // Password reset - simplified (just show info message)
@@ -358,6 +386,18 @@ async function handleAddStaff() {
       // Remove Firestore records
       await deleteDoc(doc(db, 'users', selectedStaff.id));
       await deleteDoc(doc(db, 'usernames', selectedStaff.username));
+      await logAuditEvent({
+        action: 'delete_staff',
+        module: 'Staff Management',
+        description: `Deleted staff account for ${selectedStaff.name}`,
+        targetId: selectedStaff.id,
+        targetLabel: selectedStaff.name,
+        severity: 'warning',
+        changes: {
+          account: { oldValue: selectedStaff.username, newValue: null }
+        },
+        metadata: { username: selectedStaff.username, position: selectedStaff.position }
+      });
 
       showDeleteModal = false;
       deleteLoading = false;

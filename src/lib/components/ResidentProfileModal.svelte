@@ -1,6 +1,7 @@
 <!-- src/lib/components/ResidentProfileModal.svelte -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import { logAuditEvent } from '$lib/audit';
   import DeclineEmailModal from './DeclineEmailModal.svelte';
 
   type Status = 'pending' | 'approved' | 'declined';
@@ -263,8 +264,18 @@
     try {
       const { db } = await import('$lib/firebase');
       const { updateDoc, doc } = await import('firebase/firestore');
+      const oldStatus = resident.status ?? 'pending';
       await updateDoc(doc(db, 'residents', resident.id), { status: 'declined' });
       resident = { ...resident, status: 'declined' };
+      await logAuditEvent({
+        action: 'decline_resident',
+        module: 'Residents',
+        description: `Declined household profile for ${getResidentName(resident)}`,
+        targetId: resident.id,
+        targetLabel: getResidentName(resident),
+        changes: { status: { oldValue: oldStatus, newValue: 'declined' } },
+        metadata: { qrId: resident.qrId, emailNotification: true }
+      });
       dispatch('statusChange', { id: resident.id, status: 'declined' });
       alert('Resident has been declined and email notification sent.');
     } catch (error) {
@@ -280,8 +291,18 @@
       const { db } = await import('$lib/firebase');
       const { updateDoc, doc } = await import('firebase/firestore');
       const newStatus = confirmModal.action === 'approve' ? 'approved' : 'declined';
+      const oldStatus = resident.status ?? 'pending';
       await updateDoc(doc(db, 'residents', resident.id), { status: newStatus });
       resident = { ...resident, status: newStatus };
+      await logAuditEvent({
+        action: confirmModal.action === 'approve' ? 'approve_resident' : 'decline_resident',
+        module: 'Residents',
+        description: `${capitalize(newStatus)} household profile for ${getResidentName(resident)}`,
+        targetId: resident.id,
+        targetLabel: getResidentName(resident),
+        changes: { status: { oldValue: oldStatus, newValue: newStatus } },
+        metadata: { qrId: resident.qrId }
+      });
       dispatch('statusChange', { id: resident.id, status: newStatus });
     } catch (error) {
       console.error(error);

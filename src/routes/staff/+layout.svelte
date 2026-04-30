@@ -1,6 +1,7 @@
 <!-- src/routes/staff/+layout.svelte -->
 <script>
   import { page } from '$app/stores';
+  import { logAuditEvent } from '$lib/audit';
 
   let mobileOpen = false;
 
@@ -37,6 +38,14 @@
     try {
       const { auth }    = await import('$lib/firebase');
       const { signOut } = await import('firebase/auth');
+      const currentUser = auth.currentUser;
+      await logAuditEvent({
+        action: 'logout',
+        module: 'Authentication',
+        description: 'Staff user signed out',
+        targetId: currentUser?.uid,
+        targetLabel: currentUser?.displayName || currentUser?.email || 'Staff user'
+      });
       await signOut(auth);
     } catch { /* non-critical */ }
     window.location.href = '/';

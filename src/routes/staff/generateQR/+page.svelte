@@ -1,6 +1,7 @@
 <!-- src/routes/staff/households/+page.svelte -->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { logAuditEvent } from '$lib/audit';
 
   // UPDATED: Your permanent Vercel URL
   const BASE_URL = 'https://geo-profile-bice.vercel.app';
@@ -120,6 +121,14 @@
         createdByName: staffName,
         createdAt: serverTimestamp(),
         status: 'active',
+      });
+      await logAuditEvent({
+        action: 'create_qr',
+        module: 'Households',
+        description: `Generated QR code ${qrId} for House No. ${houseNo.trim()}`,
+        targetId: docRef.id,
+        targetLabel: qrId,
+        metadata: { houseNo: houseNo.trim(), notes: notes.trim(), registrationUrl }
       });
 
       qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(registrationUrl)}&margin=10&bgcolor=ffffff&color=0f2060`;

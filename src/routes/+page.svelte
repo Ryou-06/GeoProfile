@@ -1,6 +1,7 @@
 <!-- src/routes/+page.svelte -->
 <script>
   import { onMount } from 'svelte';
+  import { logAuditEvent } from '$lib/audit';
 
   // Redirect already logged-in users to their dashboard
   onMount(async () => {
@@ -78,6 +79,20 @@
       // 4. Validate selected role matches Firestore role
       if (firestoreRole !== role) {
         errorMsg = `This account is registered as ${firestoreRole === 'admin' ? 'Admin' : 'Staff'}. Please select the correct role.`;
+        await logAuditEvent({
+          action: 'login_failed',
+          module: 'Authentication',
+          description: `${userData.name ?? username} tried to login with the wrong role`,
+          status: 'failed',
+          severity: 'warning',
+          targetId: credential.user.uid,
+          targetLabel: userData.name ?? username,
+          actorId: credential.user.uid,
+          actorName: userData.name ?? username,
+          actorRole: firestoreRole,
+          actorEmail: userData.email ?? email,
+          metadata: { selectedRole: role, actualRole: firestoreRole }
+        });
         const { signOut } = await import('firebase/auth');
         await signOut(auth);
         loading = false;
@@ -87,6 +102,17 @@
       // 5. Success — show overlay then redirect
       successName = userData.name ?? username;
       success = true;
+      await logAuditEvent({
+        action: 'login',
+        module: 'Authentication',
+        description: `${successName} signed in as ${firestoreRole}`,
+        targetId: credential.user.uid,
+        targetLabel: successName,
+        actorId: credential.user.uid,
+        actorName: successName,
+        actorRole: firestoreRole,
+        actorEmail: userData.email ?? email
+      });
 
       setTimeout(() => {
         window.location.href = firestoreRole === 'admin'
