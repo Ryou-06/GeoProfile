@@ -114,9 +114,9 @@
   }
 </script>
 
-<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-  <section class="grid max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl md:grid-cols-[320px_1fr]">
-    <aside class="bg-red-50 p-6">
+<div class="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-2 backdrop-blur-sm sm:p-4">
+  <section class="grid max-h-[96dvh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl md:grid-cols-[320px_1fr]">
+    <aside class="bg-red-50 p-4 sm:p-6">
       <div class="mb-5 flex items-center gap-3">
         <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-red-100">
           <svg class="h-5 w-5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -153,7 +153,7 @@
     </aside>
 
     <div class="flex min-h-0 flex-col">
-      <header class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+      <header class="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-6">
         <div>
           <h3 class="font-nunito text-lg font-extrabold text-slate-800">Decline Email Details</h3>
           <p class="text-xs font-semibold text-slate-500">Review the recipient and reason before sending.</p>
@@ -167,7 +167,7 @@
         </button>
       </header>
 
-      <div class="grid gap-4 overflow-y-auto p-6 lg:grid-cols-2">
+      <div class="grid gap-4 overflow-y-auto p-4 sm:p-6 lg:grid-cols-2">
         <label class="block">
           <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
             Recipient Email <span class="text-red-400">*</span>
@@ -205,7 +205,7 @@
         </label>
       </div>
 
-      <footer class="mt-auto flex gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+      <footer class="mt-auto flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-4 py-4 sm:flex-row sm:px-6">
         <button type="button" on:click={closeModal}
           class="flex-1 rounded-xl bg-white py-2.5 text-sm font-bold text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100">
           Cancel

@@ -103,7 +103,7 @@
   onDestroy(() => unsub?.());
 </script>
 
-<div class="min-h-screen bg-slate-100 p-6 font-inter">
+<div class="min-h-screen bg-slate-100 p-3 font-inter sm:p-6">
   <div class="mb-5">
     <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Audit Trails</h1>
     <p class="mt-0.5 text-sm text-slate-500">Transaction history of important system actions</p>
@@ -116,7 +116,7 @@
   {/if}
 
   <div class="mb-4 flex flex-wrap items-center gap-3">
-    <div class="relative min-w-60 flex-1 max-w-xl">
+    <div class="relative min-w-0 flex-1 basis-full sm:basis-64 max-w-xl">
       <svg class="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="8" /><path stroke-linecap="round" d="M21 21l-4.35-4.35" />
       </svg>
@@ -129,7 +129,7 @@
     </div>
     <select
       bind:value={moduleFilter}
-      class="min-w-44 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 shadow-sm outline-none transition-all focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+      class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 shadow-sm outline-none transition-all focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-auto sm:min-w-44"
     >
       {#each modules as module (module)}
         <option>{module}</option>
@@ -139,7 +139,7 @@
   </div>
 
   <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-    <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+    <div class="flex flex-col gap-1 border-b border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
       <h2 class="font-nunito font-extrabold text-slate-700">Recent Transactions</h2>
       <span class="text-xs font-semibold text-slate-400">Newest first</span>
     </div>
@@ -157,7 +157,7 @@
     {:else}
       <div class="divide-y divide-slate-100">
         {#each filtered as record (record.id)}
-          <article class="px-5 py-4">
+          <article class="px-4 py-4 sm:px-5">
             <div class="flex flex-wrap items-start gap-3">
               <span class="rounded-full px-2.5 py-1 text-xs font-bold capitalize {actionTone(record.action)}">
                 {(record.action ?? 'event').replace(/_/g, ' ')}

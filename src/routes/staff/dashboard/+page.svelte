@@ -335,7 +335,7 @@
       <p class="sub">{staffPosition ? staffPosition + ' · ' : ''}Barangay Pag-Asa Staff Portal</p>
     </div>
     <div class="actions">
-      <button class="btn btn-green" on:click={() => { window.location.href = '/staff/qr'; }}>
+      <button class="btn btn-green" on:click={() => { window.location.href = '/staff/generateQR'; }}>
         <svg class="ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 4h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
         </svg>
@@ -396,7 +396,7 @@
       {#if loading}
         <div class="chart-skeleton"></div>
       {:else}
-        <div class="chart-wrap" style="height:160px;">
+        <div class="chart-wrap">
           <canvas id="histChart"></canvas>
         </div>
       {/if}
@@ -408,7 +408,7 @@
         <div class="donut-skeleton"></div>
       {:else}
         <div class="donut-center">
-          <canvas id="donutChart" style="max-width:110px;max-height:110px;display:block;margin:0 auto 12px;"></canvas>
+          <canvas id="donutChart"></canvas>
         </div>
       {/if}
       <div class="donut-legend">
@@ -546,7 +546,7 @@
       <div class="card">
         <p class="sec-title" style="margin-bottom:10px;">Quick actions</p>
         <div class="qa-list">
-          <button class="qa-btn" on:click={() => { window.location.href = '/staff/qr'; }}>
+          <button class="qa-btn" on:click={() => { window.location.href = '/staff/generateQR'; }}>
             <div class="qa-icon qa-icon-green">
               <svg class="ico" fill="none" stroke="#059669" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 4h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
@@ -576,10 +576,30 @@
   .btn-green { background:#059669; }
   .btn-blue  { background:#2563eb; }
   .error-banner { display:flex; align-items:center; gap:8px; background:#fef2f2; border:1px solid #fecaca; color:#dc2626; font-size:0.8rem; font-weight:600; padding:10px 14px; border-radius:10px; }
-  .g4 { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
-  .g3 { display:grid; grid-template-columns:2fr 1fr; gap:10px; }
-  .g2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .g4 { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; min-width:0; }
+  .g3 { display:grid; grid-template-columns:2fr 1fr; gap:10px; min-width:0; }
+  .g2 { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; min-width:0; }
   @media(max-width:900px){ .g4{grid-template-columns:repeat(2,minmax(0,1fr));} .g3{grid-template-columns:1fr;} .g2{grid-template-columns:1fr;} }
+  @media(max-width:560px){
+    .page { padding:1rem; gap:12px; }
+    .header { flex-direction:column; align-items:stretch; }
+    .welcome { font-size:1.15rem; line-height:1.2; }
+    .actions, .btn { width:100%; }
+    .btn { justify-content:center; }
+    .g4, .g3, .g2, .source-grid { grid-template-columns:1fr; }
+    .metric-card, .card { border-radius:12px; padding:14px; }
+    .mval { font-size:1.35rem; }
+    .card-header { align-items:flex-start; flex-direction:column; gap:8px; }
+    .legend { width:100%; }
+    .chart-wrap { height:190px; min-height:190px; }
+    .donut-center canvas { max-width:128px !important; height:128px !important; }
+    .sub-row { align-items:flex-start; flex-wrap:wrap; }
+    .sub-row > .badge { margin-left:42px; }
+    .sub-meta { line-height:1.35; }
+    .source-item { padding:10px; border:0.5px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .tag-row { align-items:flex-start; }
+    .tag-label { min-width:74px; }
+  }
   .metric-card { background:#fff; border:0.5px solid #e2e8f0; border-radius:12px; padding:14px 16px; }
   .mlabel { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; margin-bottom:4px; }
   .mval { font-size:1.6rem; font-weight:800; color:#1e293b; font-family:'Nunito',sans-serif; }
@@ -590,18 +610,20 @@
   .src-pill { font-size:0.62rem; font-weight:700; padding:2px 6px; border-radius:99px; }
   .src-staff { background:#dbeafe; color:#1e40af; }
   .src-self  { background:#d1fae5; color:#065f46; }
-  .card { background:#fff; border:0.5px solid #e2e8f0; border-radius:14px; padding:16px 18px; }
+  .card { background:#fff; border:0.5px solid #e2e8f0; border-radius:14px; padding:16px 18px; min-width:0; overflow:hidden; }
   .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
   .sec-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748b; }
-  .chart-card { display:flex; flex-direction:column; }
-  .chart-wrap { position:relative; width:100%; }
+  .chart-card { display:flex; flex-direction:column; min-width:0; }
+  .chart-wrap { position:relative; width:100%; max-width:100%; height:160px; min-width:0; overflow:hidden; }
+  .chart-wrap canvas { display:block; width:100% !important; max-width:100% !important; }
   .chart-skeleton { height:160px; background:#f1f5f9; border-radius:8px; }
   .donut-skeleton { width:110px; height:110px; border-radius:50%; background:#f1f5f9; margin:0 auto 12px; }
   .legend { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
   .leg-dot { width:8px; height:8px; border-radius:2px; display:inline-block; flex-shrink:0; }
   .leg-txt { font-size:0.7rem; color:#94a3b8; }
   .donut-card { display:flex; flex-direction:column; }
-  .donut-center { text-align:center; }
+  .donut-center { position:relative; width:100%; height:122px; text-align:center; }
+  .donut-center canvas { display:block; width:100% !important; max-width:112px !important; height:112px !important; margin:0 auto 12px; }
   .donut-legend { display:flex; flex-direction:column; gap:6px; }
   .dleg-row { display:flex; align-items:center; gap:6px; }
   .dleg-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }

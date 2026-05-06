@@ -29,6 +29,8 @@
   /** @type {string|null} */
   let loadError    = null;
   let showDebug = false;
+  /** @type {(() => void) | null} */
+  let resizeMap = null;
 
   /** @type {(() => void)[]} */
   let unsubs = [];
@@ -606,6 +608,9 @@
     }).addTo(leafletMap);
 
     L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
+    resizeMap = () => leafletMap?.invalidateSize();
+    window.addEventListener('resize', resizeMap);
+    setTimeout(resizeMap, 0);
 
     try {
       const { auth } = await import('$lib/firebase');
@@ -638,6 +643,7 @@
 
   onDestroy(() => {
     unsubs.forEach(u => u());
+    if (resizeMap) window.removeEventListener('resize', resizeMap);
     if (leafletMap) leafletMap.remove();
   });
 
@@ -774,16 +780,16 @@
   </style>
 </svelte:head>
 
-<div class="flex flex-col h-full bg-slate-100 font-inter overflow-hidden" style="height: calc(100vh - 0px);">
+<div class="flex min-h-full flex-col bg-slate-100 font-inter lg:h-full lg:overflow-hidden">
 
   <!-- Header -->
-  <div class="px-6 pt-5 pb-3 flex flex-col gap-3 bg-slate-100 z-10">
-    <div class="flex items-center justify-between">
+  <div class="px-3 sm:px-6 pt-4 sm:pt-5 pb-3 flex flex-col gap-3 bg-slate-100 z-10">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h1 class="font-nunito text-xl font-extrabold text-slate-800">Household Map</h1>
         <p class="text-xs text-slate-500">Barangay Pag-Asa · Staff View</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <button on:click={() => showDebug = !showDebug}
           class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors {showDebug ? 'bg-blue-100 text-blue-700' : 'text-slate-400 hover:bg-slate-200'}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -832,9 +838,9 @@
       </div>
     {/if}
 
-    <div class="flex gap-3 flex-wrap">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
       <!-- Search -->
-      <div class="relative flex-1 min-w-48">
+      <div class="relative min-w-0 flex-1 basis-full sm:basis-64">
         <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="8"/><path stroke-linecap="round" d="M21 21l-4.35-4.35"/>
         </svg>
@@ -844,23 +850,26 @@
     </div>
 
     <!-- Street filter pills -->
-    <div class="flex gap-2 flex-wrap">
-      {#each streets as s (s)}
-        <button type="button" on:click={() => filterStreet = s}
-          class="text-xs font-bold px-3 py-1.5 rounded-full border transition-all
-                 {filterStreet === s
-                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                   : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:text-emerald-600'}">
-          {s}
-        </button>
-      {/each}
+    <div class="rounded-2xl border border-slate-200 bg-white/80 p-2 shadow-sm">
+      <div class="mb-1 px-1 text-[0.62rem] font-extrabold uppercase tracking-widest text-slate-400">Street filter</div>
+      <div class="flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap sm:overflow-visible sm:pb-0">
+        {#each streets as s (s)}
+          <button type="button" on:click={() => filterStreet = s}
+            class="min-h-9 flex-none whitespace-nowrap rounded-xl border px-3.5 py-2 text-xs font-extrabold leading-none transition-all
+                   {filterStreet === s
+                     ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm shadow-emerald-200'
+                     : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-600'}">
+            {s}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 
-  <div class="flex flex-1 gap-4 px-6 pb-6 overflow-hidden min-h-0">
+  <div class="flex flex-1 flex-col gap-4 px-3 sm:px-6 pb-4 sm:pb-6 overflow-visible lg:flex-row lg:overflow-hidden lg:min-h-0">
 
     <!-- Map -->
-    <div class="flex-1 relative rounded-2xl overflow-hidden shadow-sm border border-slate-200 bg-slate-200">
+    <div class="relative h-[55dvh] min-h-[340px] max-h-[560px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 shadow-sm sm:min-h-[460px] lg:h-auto lg:max-h-none lg:min-h-0">
 
       {#if loading}
         <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-100">
@@ -965,14 +974,14 @@
 </div>
 
       <!-- Count badge -->
-      <div class="absolute top-3 right-3 z-10 bg-white rounded-lg shadow-sm border border-slate-100 px-3 py-1.5 flex items-center gap-1.5">
+      <div class="absolute top-3 right-3 z-10 max-w-[calc(100%-1.5rem)] bg-white rounded-lg shadow-sm border border-slate-100 px-3 py-1.5 flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
         <span class="text-xs font-bold text-slate-600">{filteredHouseholds.length} shown</span>
       </div>
     </div>
 
     <!-- Side panel -->
-    <div class="w-80 shrink-0 flex flex-col gap-3 overflow-y-auto">
+    <div class="grid w-full shrink-0 gap-3 overflow-visible md:grid-cols-2 lg:flex lg:w-80 lg:flex-col lg:overflow-y-auto">
 
       <!-- Selected household -->
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

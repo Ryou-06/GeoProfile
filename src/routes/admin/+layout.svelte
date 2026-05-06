@@ -67,7 +67,7 @@
   }
 </script>
 
-<div class="flex h-screen overflow-hidden bg-slate-100">
+<div class="flex h-dvh min-h-screen overflow-hidden bg-slate-100">
 
   <!-- Mobile backdrop -->
   {#if mobileOpen}
@@ -146,7 +146,7 @@
   <div class="flex-1 flex flex-col overflow-hidden">
 
     <!-- Mobile topbar -->
-    <header class="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200 shadow-sm">
+    <header class="lg:hidden flex min-h-14 items-center gap-3 px-3 sm:px-4 py-2.5 bg-white border-b border-slate-200 shadow-sm">
       <button
         type="button"
         on:click={() => (mobileOpen = !mobileOpen)}
@@ -163,7 +163,7 @@
         alt="GeoProfile Logo" 
         class="w-6 h-6 object-contain"
       />
-      <span class="font-nunito font-black text-slate-700 text-lg">
+      <span class="min-w-0 truncate font-nunito font-black text-slate-700 text-base sm:text-lg">
         <span class="font-light text-slate-400">Geo</span>Profile
       </span>
       <span class="ml-auto text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">

@@ -581,10 +581,10 @@
 
   <div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5">
     <section
-      class="pointer-events-auto flex h-[94vh] w-[97vw] max-w-7xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl"
+      class="pointer-events-auto flex h-[96dvh] w-[98vw] max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:h-[94vh] sm:rounded-[1.75rem]"
       aria-label="Resident profile modal"
     >
-      <header class="flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4">
+      <header class="flex shrink-0 flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
             <p class="text-xs font-extrabold uppercase tracking-[0.24em] text-blue-700">
@@ -603,19 +603,19 @@
           </h2>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {#if resident.status === 'pending'}
             <button
               type="button"
               on:click={() => openConfirm('approve')}
-              class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+              class="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 sm:flex-none"
             >
               Approve
             </button>
             <button
               type="button"
               on:click={() => openConfirm('decline')}
-              class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-rose-700"
+              class="flex-1 rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-rose-700 sm:flex-none"
             >
               Decline
             </button>
@@ -879,7 +879,7 @@
                     <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Address</p>
                     <p class="text-sm font-bold text-slate-700">{display(buildAddress(resident))}</p>
                   </div>
-                  <div class="grid grid-cols-2 gap-3">
+                  <div class="grid gap-3 sm:grid-cols-2">
                     <div>
                       <p class="text-[0.65rem] font-bold uppercase tracking-widest text-slate-400">Purok</p>
                       <p class="text-sm font-bold text-slate-700">{display(resident.purok)}</p>
@@ -906,7 +906,7 @@
                   {/each}
                 </div>
 
-                <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <div class="mt-4 grid gap-3 text-xs sm:grid-cols-2">
                   <div class="rounded-xl bg-white p-3">
                     <p class="font-bold uppercase tracking-wider text-slate-400">Terms</p>
                     <p class="mt-1 font-extrabold text-slate-700">{yesNo(resident.termsAccepted)}</p>
@@ -990,7 +990,7 @@
             </div>
           </section>
 
-          <section class="flex min-h-0 flex-col bg-slate-50 p-5">
+          <section class="flex min-h-[280px] flex-col bg-slate-50 p-4 sm:p-5 lg:min-h-0">
             <div
               class="flex flex-1 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white/70 p-8 text-center"
             >

@@ -441,7 +441,7 @@
       {#if loading}
         <div class="chart-skeleton"></div>
       {:else}
-        <div style="position:relative;height:170px;">
+        <div class="chart-box">
           <canvas id="regChart"></canvas>
         </div>
       {/if}
@@ -471,8 +471,8 @@
       {#if loading}
         <div class="donut-sk"></div>
       {:else}
-        <div style="text-align:center;margin-bottom:10px;">
-          <canvas id="genderChart" style="max-width:100px;max-height:100px;display:block;margin:0 auto;"></canvas>
+        <div class="donut-box">
+          <canvas id="genderChart"></canvas>
         </div>
         <div class="gender-legend">
           <div class="gleg"><span class="gdot" style="background:#2563eb;"></span><span class="glabel">Male</span><span class="gval">{genderMale.toLocaleString()}</span></div>
@@ -609,14 +609,32 @@
   .error-banner { display:flex; align-items:center; gap:8px; background:#fef2f2; border:1px solid #fecaca; color:#dc2626; font-size:0.8rem; font-weight:600; padding:10px 14px; border-radius:10px; }
 
   /* 5-column grid for stat cards */
-  .g5      { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
-  .g3-sub  { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-  .g3-mid  { display:grid; grid-template-columns:2fr 1.2fr 1fr; gap:10px; }
-  .g2-bot  { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .g5      { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; min-width:0; }
+  .g3-sub  { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; min-width:0; }
+  .g3-mid  { display:grid; grid-template-columns:2fr 1.2fr 1fr; gap:10px; min-width:0; }
+  .g2-bot  { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; min-width:0; }
 
   @media (max-width:1200px) { .g5 { grid-template-columns:repeat(3,minmax(0,1fr)); } }
   @media (max-width:1100px) { .g3-mid { grid-template-columns:1fr 1fr; } .g3-mid .chart-card { grid-column:span 2; } }
   @media (max-width:800px)  { .g5 { grid-template-columns:repeat(2,minmax(0,1fr)); } .g3-sub { grid-template-columns:repeat(3,minmax(0,1fr)); } .g3-mid { grid-template-columns:1fr; } .g3-mid .chart-card { grid-column:span 1; } .g2-bot { grid-template-columns:1fr; } }
+  @media (max-width:560px) {
+    .page { padding:1rem; gap:12px; }
+    .page-header { flex-direction:column; align-items:stretch; }
+    .page-title { font-size:1.2rem; }
+    .btn-pending { width:100%; justify-content:center; }
+    .g5, .g3-sub, .g3-mid, .g2-bot, .sector-grid { grid-template-columns:1fr; }
+    .stat-card, .metric-card, .card { border-radius:12px; padding:14px; }
+    .stat-val { font-size:1.7rem; }
+    .mval { font-size:1.35rem; }
+    .card-hd { align-items:flex-start; flex-direction:column; gap:8px; }
+    .chart-box { height:190px; }
+    .donut-box { height:128px; }
+    .sec-title { line-height:1.25; }
+    .age-row, .cs-row { gap:6px; }
+    .age-label, .cs-label { min-width:62px; }
+    .sector-item { align-items:flex-start; padding:10px; border:0.5px solid #e2e8f0; border-radius:10px; background:#f8fafc; }
+    .act-meta { line-height:1.35; }
+  }
 
   .stat-card   { border-radius:14px; padding:16px 18px; color:#fff; }
   .stat-label  { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; opacity:.85; margin-bottom:4px; }
@@ -634,10 +652,12 @@
   .mval-warn   { color:#d97706; }
   .mval-danger { color:#dc2626; }
 
-  .card { background:#fff; border:0.5px solid #e2e8f0; border-radius:14px; padding:16px 18px; }
+  .card { background:#fff; border:0.5px solid #e2e8f0; border-radius:14px; padding:16px 18px; min-width:0; overflow:hidden; }
   .card-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
   .sec-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748b; }
-  .chart-card { display:flex; flex-direction:column; }
+  .chart-card { display:flex; flex-direction:column; min-width:0; }
+  .chart-box { position:relative; width:100%; max-width:100%; height:170px; min-width:0; overflow:hidden; }
+  .chart-box canvas { display:block; width:100% !important; max-width:100% !important; }
   .chart-skeleton { height:170px; background:#f1f5f9; border-radius:8px; }
   .badge { font-size:0.65rem; font-weight:700; padding:3px 8px; border-radius:99px; }
   .b-info { background:#dbeafe; color:#1e40af; }
@@ -650,6 +670,8 @@
   .prog      { height:100%; border-radius:99px; transition:width .5s ease; }
 
   .donut-sk { width:100px; height:100px; border-radius:50%; background:#f1f5f9; margin:0 auto 12px; }
+  .donut-box { position:relative; width:100%; height:112px; margin:0 auto 10px; text-align:center; }
+  .donut-box canvas { display:block; width:100% !important; max-width:112px !important; height:112px !important; margin:0 auto; }
   .gender-legend { display:flex; flex-direction:column; gap:7px; }
   .gleg  { display:flex; align-items:center; gap:6px; }
   .gdot  { width:8px; height:8px; border-radius:2px; flex-shrink:0; }

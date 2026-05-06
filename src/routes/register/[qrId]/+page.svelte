@@ -52,6 +52,7 @@
   let submitted = false;
   let loading = false;
   let errorMsg = '';
+  let invalidField = '';
   let step = 1;
 
   let gpsLat: number | null = null;
@@ -73,7 +74,6 @@
 
   let houseNo = '';
   let street = '';
-  let zone = '';
   let landmark = '';
 
   let residentialInfo = {
@@ -123,7 +123,7 @@
   const stepLabels = ['Type', 'Details', 'Parents', 'Members', 'Photo', 'Review'];
   const reviewLabels = ['Profile', 'Address', 'Details', 'Parents', 'Members', 'Photo'];
 
-  $: fullAddress = [houseNo.trim(), street, zone ? `Zone ${zone}` : '', 'Barangay Pag-Asa', 'Olongapo City', 'Zambales'].filter(Boolean).join(', ');
+  $: fullAddress = [houseNo.trim(), street, 'Barangay Pag-Asa', 'Olongapo City', 'Zambales'].filter(Boolean).join(', ');
   $: canRegister = DEMO_BYPASS || gpsStatus === 'granted';
   $: isSingleParentHousehold = householdType === 'residential' && (familySetup === 'mother_only' || familySetup === 'father_only' || fatherStatus !== 'present' || motherStatus !== 'present');
   $: headOfFamily =
@@ -170,6 +170,45 @@
   function isSenior(person: PersonProfile) {
     const age = calculateAge(person.birthdate);
     return age !== null && age >= 60;
+  }
+
+  function markInvalid(field: string, message: string) {
+    invalidField = field;
+    return message;
+  }
+
+  function scrollToInvalidField() {
+    if (!invalidField) return;
+    setTimeout(() => {
+      const selector = `[data-field="${CSS.escape(invalidField)}"]`;
+      const target = document.querySelector<HTMLElement>(selector);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target?.focus?.({ preventScroll: true });
+    }, 80);
+  }
+
+  function isValidEmail(value: string) {
+    if (!value.trim()) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  }
+
+  function isValidContactNo(value: string) {
+    if (!value.trim()) return true;
+    const digits = value.replace(/[^\d]/g, '');
+    return digits.length >= 7 && digits.length <= 15;
+  }
+
+  function isValidBirthdate(value: string) {
+    if (!value) return false;
+    const date = new Date(value);
+    const age = calculateAge(value);
+    return !Number.isNaN(date.getTime()) && date <= new Date() && age !== null && age >= 0 && age <= 120;
+  }
+
+  function isNonNegativeNumber(value: string) {
+    if (!String(value).trim()) return true;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0;
   }
 
   function seniorStatusText(person: PersonProfile) {
@@ -492,61 +531,87 @@
     return fallback;
   }
 
-  function personIsValid(person: PersonProfile, label: string) {
-    if (!person.fullName.trim()) return `${label}: full name is required.`;
-    if (!person.birthdate) return `${label}: birthdate is required.`;
-    if (!person.sex) return `${label}: sex is required.`;
-    if (person.isPWD && !person.pwdType) return `${label}: PWD type is required.`;
-    if (person.isPWD && !person.pwdProof) return `${label}: PWD proof is required.`;
-    if (isSenior(person) && !person.seniorProof) return `${label}: senior proof is required.`;
+  function personIsValid(person: PersonProfile, label: string, fieldPrefix: string) {
+    if (!person.fullName.trim()) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name is required.`);
+    if (!person.birthdate) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: birthdate is required.`);
+    if (!isValidBirthdate(person.birthdate)) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: enter a valid birthdate.`);
+    if (!person.sex) return markInvalid(`${fieldPrefix}.sex`, `${label}: sex is required.`);
+    if (!isValidContactNo(person.contactNo)) return markInvalid(`${fieldPrefix}.contactNo`, `${label}: contact number must be 7 to 15 digits.`);
+    if (!isValidEmail(person.email)) return markInvalid(`${fieldPrefix}.email`, `${label}: enter a valid email address.`);
+    if (person.isPWD && !person.pwdType) return markInvalid(`${fieldPrefix}.pwdType`, `${label}: PWD type is required.`);
+    if (person.isPWD && !person.pwdProof) return markInvalid(`${fieldPrefix}.pwdProof`, `${label}: PWD proof is required.`);
+    if (isSenior(person) && !person.seniorProof) return markInvalid(`${fieldPrefix}.seniorProof`, `${label}: senior proof is required.`);
     return '';
   }
 
   function validateStep() {
+    invalidField = '';
     if (!canRegister) return 'You must be inside Barangay Pag-Asa before filling out this form.';
     if (step === 1) {
       if (gpsLat === null || gpsLng === null) return 'Please wait for GPS to lock your location.';
-      if (!householdType) return 'Please choose a household/profile type.';
-      if (!agreedToTerms) return 'Please agree to submit your information to the system.';
+      if (!householdType) return markInvalid('householdType', 'Please choose a household/profile type.');
+      if (!agreedToTerms) return markInvalid('agreedToTerms', 'Please agree to submit your information to the system.');
     }
 
     if (step === 2) {
-      if (!houseNo.trim()) return 'House No. / Unit is required.';
-      if (!street) return 'Street is required.';
-      if (householdType === 'residential' && (!residentialInfo.dwellingType || !residentialInfo.ownershipStatus)) return 'Dwelling type and ownership status are required.';
-      if (householdType === 'business' && (!businessInfo.businessName.trim() || !businessInfo.ownerName.trim() || !businessInfo.businessType.trim())) return 'Business name, owner, and type are required.';
-      if (householdType === 'boarding' && (!boardingInfo.propertyName.trim() || !boardingInfo.ownerName.trim() || !boardingInfo.roomsCount)) return 'Property name, owner, and room count are required.';
+      if (!houseNo.trim()) return markInvalid('houseNo', 'House No. / Unit is required.');
+      if (!street) return markInvalid('street', 'Street is required.');
+      if (householdType === 'residential') {
+        if (!residentialInfo.dwellingType) return markInvalid('residential.dwellingType', 'Dwelling type is required.');
+        if (!residentialInfo.ownershipStatus) return markInvalid('residential.ownershipStatus', 'Ownership status is required.');
+        if (!isNonNegativeNumber(residentialInfo.yearsOfStay)) return markInvalid('residential.yearsOfStay', 'Years of stay must be a valid number.');
+      }
+      if (householdType === 'business') {
+        if (!businessInfo.businessName.trim()) return markInvalid('business.businessName', 'Business name is required.');
+        if (!businessInfo.ownerName.trim()) return markInvalid('business.ownerName', 'Owner name is required.');
+        if (!businessInfo.businessType.trim()) return markInvalid('business.businessType', 'Business type is required.');
+        if (!isValidContactNo(businessInfo.contactNo)) return markInvalid('business.contactNo', 'Contact number must be 7 to 15 digits.');
+        if (!isNonNegativeNumber(businessInfo.employeesCount)) return markInvalid('business.employeesCount', 'Number of employees must be a valid number.');
+        if (!isNonNegativeNumber(businessInfo.operatingYears)) return markInvalid('business.operatingYears', 'Years operating must be a valid number.');
+      }
+      if (householdType === 'boarding') {
+        if (!boardingInfo.propertyName.trim()) return markInvalid('boarding.propertyName', 'Property name is required.');
+        if (!boardingInfo.ownerName.trim()) return markInvalid('boarding.ownerName', 'Owner or manager is required.');
+        if (!boardingInfo.roomsCount || Number(boardingInfo.roomsCount) <= 0) return markInvalid('boarding.roomsCount', 'Number of rooms is required.');
+        if (!isNonNegativeNumber(boardingInfo.tenantCapacity)) return markInvalid('boarding.tenantCapacity', 'Tenant capacity must be a valid number.');
+        if (!isNonNegativeNumber(boardingInfo.currentTenants)) return markInvalid('boarding.currentTenants', 'Current tenants must be a valid number.');
+        if (!isValidContactNo(boardingInfo.contactNo)) return markInvalid('boarding.contactNo', 'Contact number must be 7 to 15 digits.');
+        if (!isNonNegativeNumber(boardingInfo.operatingYears)) return markInvalid('boarding.operatingYears', 'Years operating must be a valid number.');
+      }
     }
 
     if (step === 3 && householdType === 'residential') {
       if (fatherStatus === 'present') {
-        const fatherError = personIsValid(father, 'Father/head');
+        const fatherError = personIsValid(father, 'Father/head', 'father');
         if (fatherError) return fatherError;
       }
       if (motherStatus === 'present') {
-        const motherError = personIsValid(mother, 'Mother/head');
+        const motherError = personIsValid(mother, 'Mother/head', 'mother');
         if (motherError) return motherError;
       }
-      if (fatherStatus !== 'present' && motherStatus !== 'present') return 'At least one parent, head, or guardian must be present.';
-      if (isSingleParentHousehold && !singleParentProof) return 'Solo parent/guardian proof is required.';
+      if (fatherStatus !== 'present' && motherStatus !== 'present') return markInvalid('familySetup', 'At least one parent, head, or guardian must be present.');
+      if (isSingleParentHousehold && !singleParentProof) return markInvalid('singleParentProof', 'Solo parent/guardian proof is required.');
     }
 
     if (step === 4 && (householdType === 'residential' || householdType === 'boarding')) {
       for (let i = 0; i < members.length; i++) {
         const personLabel = householdType === 'boarding' ? `Tenant/boarder ${i + 1}` : `Family member ${i + 1}`;
-        const memberError = personIsValid(members[i], personLabel);
+        const memberError = personIsValid(members[i], personLabel, `member-${i}`);
         if (memberError) return memberError;
-        if (!members[i].relationship.trim()) return `${personLabel}: relationship/room is required.`;
+        if (!members[i].relationship.trim()) return markInvalid(`member-${i}.relationship`, `${personLabel}: relationship/room is required.`);
       }
     }
 
-    if (step === 5 && !housePhoto) return 'House or establishment photo is required.';
+    if (step === 5 && !housePhoto) return markInvalid('housePhoto', 'House or establishment photo is required.');
     return '';
   }
 
   function nextStep() {
     errorMsg = validateStep();
-    if (errorMsg) return;
+    if (errorMsg) {
+      scrollToInvalidField();
+      return;
+    }
     step = Math.min(TOTAL_STEPS, step + 1);
     if (step === 6) reviewPage = 0;
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -602,10 +667,13 @@
       errorMsg = 'Registration blocked because your location is not confirmed inside Barangay Pag-Asa.';
       return;
     }
-    for (let checkStep = 1; checkStep <= 5; checkStep++) {
+      for (let checkStep = 1; checkStep <= 5; checkStep++) {
       step = checkStep;
       errorMsg = validateStep();
-      if (errorMsg) return;
+      if (errorMsg) {
+        scrollToInvalidField();
+        return;
+      }
     }
     step = 6;
 
@@ -654,7 +722,6 @@
         },
         houseNo: houseNo.trim(),
         street,
-        zone: zone.trim(),
         landmark: landmark.trim() || household?.landmark || '',
         barangay: 'Barangay Pag-Asa',
         city: 'Olongapo City',
@@ -874,7 +941,7 @@
             <h2 class="title">Household Type and Consent</h2>
             <p class="sub">Choose what kind of profile this QR session is for.</p>
           </div>
-          <div class="grid md:grid-cols-3 gap-3">
+          <div class="grid md:grid-cols-3 gap-3" data-field="householdType" tabindex="-1">
             <button type="button" on:click={() => (householdType = 'residential')} class="type-card {householdType === 'residential' ? 'type-card-active' : ''}">
               <span class="font-bold text-sm">Residential</span><span class="text-xs opacity-70">Family or individual living household</span>
             </button>
@@ -886,7 +953,7 @@
             </button>
           </div>
           <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 cursor-pointer">
-            <input type="checkbox" bind:checked={agreedToTerms} class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700" />
+            <input type="checkbox" bind:checked={agreedToTerms} data-field="agreedToTerms" class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700" />
             <span class="text-xs text-slate-600 leading-relaxed">I agree to voluntarily submit this information to the GeoProfile system of Barangay Pag-Asa for profiling, records, mapping, and verification.</span>
           </label>
         </section>
@@ -898,10 +965,9 @@
             <p class="sub">The fields below change based on the selected profile type.</p>
           </div>
           <div class="grid md:grid-cols-2 gap-3">
-            <div><label class="label">House No. / Unit / Block <span class="text-red-400">*</span></label><input class="input" bind:value={houseNo} /></div>
-            <div><label class="label">Street <span class="text-red-400">*</span></label><select class="input" bind:value={street}><option value="">Select street</option>{#each streets as item (item)}<option value={item}>{item}</option>{/each}</select></div>
-            <div><label class="label">Zone</label><input class="input" bind:value={zone} /></div>
-            <div><label class="label">Landmark</label><input class="input" bind:value={landmark} /></div>
+            <div class="field-block"><label class="label" for="houseNo">House No. / Unit / Block <span class="text-red-400">*</span></label><input id="houseNo" data-field="houseNo" class="input" bind:value={houseNo} /><p class="tip">Use the number or unit shown at the house, gate, or building.</p></div>
+            <div class="field-block"><label class="label" for="street">Street <span class="text-red-400">*</span></label><select id="street" data-field="street" class="input" bind:value={street}><option value="">Select street</option>{#each streets as item (item)}<option value={item}>{item}</option>{/each}</select><p class="tip">Choose the street where the household is located.</p></div>
+            <div class="field-block md:col-span-2"><label class="label" for="landmark">Landmark <span class="text-slate-300 normal-case">(optional)</span></label><input id="landmark" data-field="landmark" class="input" bind:value={landmark} placeholder="e.g. near chapel, beside store, blue gate" /><p class="tip">Optional, but helpful if the house is hard to find or has no clear number.</p></div>
           </div>
           <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
             <p class="text-[0.65rem] font-bold uppercase tracking-widest text-blue-400 mb-1">Address Preview</p>
@@ -910,10 +976,10 @@
 
           {#if householdType === 'residential'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div><label class="label">Dwelling Type <span class="text-red-400">*</span></label><select class="input" bind:value={residentialInfo.dwellingType}><option value="">Select</option><option>Single house</option><option>Duplex</option><option>Apartment</option><option>Room</option><option>Informal dwelling</option></select></div>
-              <div><label class="label">Ownership Status <span class="text-red-400">*</span></label><select class="input" bind:value={residentialInfo.ownershipStatus}><option value="">Select</option><option>Owned</option><option>Rented</option><option>Living with relatives</option><option>Caretaker</option><option>Other</option></select></div>
-              <div><label class="label">Years of Stay</label><input class="input" type="number" bind:value={residentialInfo.yearsOfStay} /></div>
-              <div><label class="label">Monthly Income Range</label><select class="input" bind:value={residentialInfo.monthlyIncomeRange}><option value="">Select</option><option>Below 10,000</option><option>10,000 - 20,000</option><option>20,001 - 40,000</option><option>Above 40,000</option><option>Prefer not to say</option></select></div>
+              <div class="field-block"><label class="label" for="dwellingType">Dwelling Type <span class="text-red-400">*</span></label><select id="dwellingType" data-field="residential.dwellingType" class="input" bind:value={residentialInfo.dwellingType}><option value="">Select</option><option>Single house</option><option>Duplex</option><option>Informal dwelling</option><option>Other residential dwelling</option></select><p class="tip">For apartment, room, or boarding house, go back and choose Boarding / Rental.</p></div>
+              <div class="field-block"><label class="label" for="ownershipStatus">Ownership Status <span class="text-red-400">*</span></label><select id="ownershipStatus" data-field="residential.ownershipStatus" class="input" bind:value={residentialInfo.ownershipStatus}><option value="">Select</option><option>Owned</option><option>Rented</option><option>Living with relatives</option><option>Caretaker</option><option>Other</option></select><p class="tip">Select the arrangement that best describes who uses the home.</p></div>
+              <div class="field-block"><label class="label" for="yearsOfStay">Years of Stay <span class="text-slate-300 normal-case">(optional)</span></label><input id="yearsOfStay" data-field="residential.yearsOfStay" class="input" type="number" min="0" bind:value={residentialInfo.yearsOfStay} /><p class="tip">Approximate number is okay.</p></div>
+              <div class="field-block"><label class="label" for="incomeRange">Monthly Income Range <span class="text-slate-300 normal-case">(optional)</span></label><select id="incomeRange" class="input" bind:value={residentialInfo.monthlyIncomeRange}><option value="">Select</option><option>Below 10,000</option><option>10,000 - 20,000</option><option>20,001 - 40,000</option><option>Above 40,000</option><option>Prefer not to say</option></select><p class="tip">This helps with barangay planning and assistance, but may be skipped.</p></div>
             </div>
             <div>
               <p class="label">Utilities Available</p>
@@ -925,23 +991,23 @@
             </div>
           {:else if householdType === 'business'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div><label class="label">Business Name <span class="text-red-400">*</span></label><input class="input" bind:value={businessInfo.businessName} /></div>
-              <div><label class="label">Owner Name <span class="text-red-400">*</span></label><input class="input" bind:value={businessInfo.ownerName} /></div>
-              <div><label class="label">Business Type <span class="text-red-400">*</span></label><input class="input" bind:value={businessInfo.businessType} placeholder="e.g. Sari-sari store, eatery" /></div>
-              <div><label class="label">Permit Number</label><input class="input" bind:value={businessInfo.permitNo} /></div>
-              <div><label class="label">Contact Number</label><input class="input" bind:value={businessInfo.contactNo} /></div>
-              <div><label class="label">No. of Employees</label><input class="input" type="number" bind:value={businessInfo.employeesCount} /></div>
-              <div><label class="label">Years Operating</label><input class="input" type="number" bind:value={businessInfo.operatingYears} /></div>
+              <div class="field-block"><label class="label">Business Name <span class="text-red-400">*</span></label><input data-field="business.businessName" class="input" bind:value={businessInfo.businessName} /><p class="tip">Use the store or establishment name.</p></div>
+              <div class="field-block"><label class="label">Owner Name <span class="text-red-400">*</span></label><input data-field="business.ownerName" class="input" bind:value={businessInfo.ownerName} /><p class="tip">Name of owner or person in charge.</p></div>
+              <div class="field-block"><label class="label">Business Type <span class="text-red-400">*</span></label><input data-field="business.businessType" class="input" bind:value={businessInfo.businessType} placeholder="e.g. Sari-sari store, eatery" /><p class="tip">Describe what kind of business operates here.</p></div>
+              <div class="field-block"><label class="label">Permit Number <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={businessInfo.permitNo} /><p class="tip">Leave blank if not available.</p></div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.contactNo" class="input" bind:value={businessInfo.contactNo} /><p class="tip">Use digits only if possible.</p></div>
+              <div class="field-block"><label class="label">No. of Employees <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.employeesCount" class="input" type="number" min="0" bind:value={businessInfo.employeesCount} /></div>
+              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.operatingYears" class="input" type="number" min="0" bind:value={businessInfo.operatingYears} /></div>
             </div>
           {:else if householdType === 'boarding'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div><label class="label">Property Name <span class="text-red-400">*</span></label><input class="input" bind:value={boardingInfo.propertyName} /></div>
-              <div><label class="label">Owner / Manager <span class="text-red-400">*</span></label><input class="input" bind:value={boardingInfo.ownerName} /></div>
-              <div><label class="label">Number of Rooms <span class="text-red-400">*</span></label><input class="input" type="number" bind:value={boardingInfo.roomsCount} /></div>
-              <div><label class="label">Tenant Capacity</label><input class="input" type="number" bind:value={boardingInfo.tenantCapacity} /></div>
-              <div><label class="label">Current Tenants</label><input class="input" type="number" bind:value={boardingInfo.currentTenants} /></div>
-              <div><label class="label">Contact Number</label><input class="input" bind:value={boardingInfo.contactNo} /></div>
-              <div><label class="label">Years Operating</label><input class="input" type="number" bind:value={boardingInfo.operatingYears} /></div>
+              <div class="field-block"><label class="label">Property Name <span class="text-red-400">*</span></label><input data-field="boarding.propertyName" class="input" bind:value={boardingInfo.propertyName} /><p class="tip">Apartment, room rental, or boarding house name.</p></div>
+              <div class="field-block"><label class="label">Owner / Manager <span class="text-red-400">*</span></label><input data-field="boarding.ownerName" class="input" bind:value={boardingInfo.ownerName} /></div>
+              <div class="field-block"><label class="label">Number of Rooms <span class="text-red-400">*</span></label><input data-field="boarding.roomsCount" class="input" type="number" min="1" bind:value={boardingInfo.roomsCount} /></div>
+              <div class="field-block"><label class="label">Tenant Capacity <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.tenantCapacity" class="input" type="number" min="0" bind:value={boardingInfo.tenantCapacity} /></div>
+              <div class="field-block"><label class="label">Current Tenants <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.currentTenants" class="input" type="number" min="0" bind:value={boardingInfo.currentTenants} /></div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.contactNo" class="input" bind:value={boardingInfo.contactNo} /></div>
+              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.operatingYears" class="input" type="number" min="0" bind:value={boardingInfo.operatingYears} /></div>
             </div>
           {/if}
         </section>
@@ -952,23 +1018,23 @@
             <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">This profile type does not require parent/head details. Continue to the next part.</div>
           {:else}
             <div class="grid md:grid-cols-3 gap-3">
-              <div><label class="label">Family Status <span class="text-red-400">*</span></label><select class="input" bind:value={familySetup} on:change={syncFamilySetup}><option value="both">Both parents present</option><option value="mother_only">Mother only</option><option value="father_only">Father only</option><option value="guardian">Guardian only</option></select></div>
-              <div><label class="label">Father Status <span class="text-red-400">*</span></label><select class="input" bind:value={fatherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
-              <div><label class="label">Mother Status <span class="text-red-400">*</span></label><select class="input" bind:value={motherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
+              <div class="field-block"><label class="label">Family Status <span class="text-red-400">*</span></label><select data-field="familySetup" class="input" bind:value={familySetup} on:change={syncFamilySetup}><option value="both">Both parents present</option><option value="mother_only">Mother only</option><option value="father_only">Father only</option><option value="guardian">Guardian only</option></select><p class="tip">Choose who acts as the household head or guardian.</p></div>
+              <div class="field-block"><label class="label">Father Status <span class="text-red-400">*</span></label><select class="input" bind:value={fatherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
+              <div class="field-block"><label class="label">Mother Status <span class="text-red-400">*</span></label><select class="input" bind:value={motherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
             </div>
 
             {#if fatherStatus === 'present'}
-              {@render PersonFields('Father / Male Head', father)}
+              {@render PersonFields('Father / Male Head', father, false, 'father')}
             {/if}
             {#if motherStatus === 'present'}
-              {@render PersonFields('Mother / Female Head', mother)}
+              {@render PersonFields('Mother / Female Head', mother, false, 'mother')}
             {/if}
 
             {#if isSingleParentHousehold}
               <div class="rounded-xl border border-violet-200 bg-violet-50 p-4 space-y-3">
                 <p class="text-sm font-bold text-violet-700">Single parent / guardian detected</p>
                 <p class="text-xs text-violet-600">Upload solo parent ID, death certificate, barangay certification, or supporting document.</p>
-                {#if singleParentProofPreview}<img src={singleParentProofPreview} alt="Single parent proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">Upload Single Parent Proof<input type="file" accept="image/*" on:change={handleSingleParentProofChange} class="hidden" /></label>{/if}
+                {#if singleParentProofPreview}<img src={singleParentProofPreview} alt="Single parent proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="singleParentProof" tabindex="-1">Upload Single Parent Proof<input type="file" accept="image/*" on:change={handleSingleParentProofChange} class="hidden" /></label>{/if}
               </div>
             {/if}
           {/if}
@@ -983,10 +1049,10 @@
           {#if householdType === 'business'}
             <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">For business establishments, resident details are only needed if someone lives at this address. Use Residential or Boarding/Rental when profiling people who live here.</div>
           {:else}
-            <div><label class="label">{householdType === 'boarding' ? 'Number of Tenants / Boarders' : 'Number of Family Members'}</label><input class="input" type="number" min="0" max="20" bind:value={memberCount} on:change={setMemberCount} /></div>
+            <div class="field-block"><label class="label">{householdType === 'boarding' ? 'Number of Tenants / Boarders' : 'Number of Family Members'} <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" type="number" min="0" max="20" bind:value={memberCount} on:change={setMemberCount} /><p class="tip">Enter 0 if there are no additional people to list.</p></div>
             {#if members.length === 0}<div class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">{householdType === 'boarding' ? 'No tenants or boarders added yet.' : 'No additional family members added.'}</div>{/if}
             {#each members as member, index (member.id)}
-              {@render PersonFields(householdType === 'boarding' ? `Tenant / Boarder ${index + 1}` : `Family Member ${index + 1}`, member, true)}
+              {@render PersonFields(householdType === 'boarding' ? `Tenant / Boarder ${index + 1}` : `Family Member ${index + 1}`, member, true, `member-${index}`)}
             {/each}
           {/if}
         </section>
@@ -999,7 +1065,7 @@
               <button type="button" aria-label="Remove photo" on:click={() => { housePhoto = null; housePhotoPreview = ''; }} class="absolute top-2 right-2 rounded-full bg-red-500 text-white w-8 h-8 font-bold">x</button>
             </div>
           {:else}
-            <label class="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all bg-slate-50 border-slate-300">
+            <label data-field="housePhoto" tabindex="-1" class="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all bg-slate-50 border-slate-300">
               <div class="w-14 h-14 rounded-2xl bg-slate-200 flex items-center justify-center text-slate-500 font-bold">CAM</div>
               <div class="text-center"><p class="text-sm font-bold text-slate-700">Take Photo or Upload</p><p class="text-xs text-slate-400 mt-0.5">Front view, max 15MB</p></div>
               <input type="file" accept="image/*" capture="environment" on:change={handlePhotoChange} class="hidden" />
@@ -1036,7 +1102,6 @@
               <div class="review-grid">
                 {@render ReviewItem('House / Unit', houseNo || '-')}
                 {@render ReviewItem('Street', street || '-')}
-                {@render ReviewItem('Zone', zone || '-')}
                 {@render ReviewItem('Landmark', landmark || '-')}
                 {@render ReviewItem('Full Address', fullAddress || '-')}
                 {@render ReviewItem('GPS', gpsLat && gpsLng ? `${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)} (+/-${gpsAccuracy ?? 'N/A'}m)` : 'Waiting for GPS')}
@@ -1114,21 +1179,21 @@
   {/if}
 </div>
 
-{#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false)}
+{#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false, fieldPrefix = title)}
   <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
     <div class="grid md:grid-cols-2 gap-3">
-      {#if showRelationship}<div><label class="label">Relationship <span class="text-red-400">*</span></label><input class="input" bind:value={(person as FamilyMember).relationship} /></div>{/if}
-      <div><label class="label">Full Name <span class="text-red-400">*</span></label><input class="input" bind:value={person.fullName} /></div>
-      <div><label class="label">Birthdate <span class="text-red-400">*</span></label><input class="input" type="date" bind:value={person.birthdate} /></div>
-      <div><label class="label">Sex <span class="text-red-400">*</span></label><select class="input" bind:value={person.sex}><option value="">Select</option><option>Male</option><option>Female</option></select></div>
-      <div><label class="label">Civil Status</label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
-      <div><label class="label">Occupation</label><input class="input" bind:value={person.occupation} /></div>
-      <div><label class="label">Contact No.</label><input class="input" bind:value={person.contactNo} /></div>
-      <div><label class="label">Email</label><input class="input" type="email" bind:value={person.email} /></div>
-      <div><label class="label">Vaccination Status</label><select class="input" bind:value={person.vaccinationStatus}><option value="">Select</option><option>Fully vaccinated</option><option>Partially vaccinated</option><option>Unvaccinated</option><option>Unknown</option></select></div>
-      <div><label class="label">Blood Type</label><select class="input" bind:value={person.bloodType}><option value="">Select</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option><option>Unknown</option></select></div>
-      <div class="md:col-span-2"><label class="label">Medical Notes</label><input class="input" bind:value={person.medicalNotes} /></div>
+      {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input" bind:value={(person as FamilyMember).relationship} /><p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
+      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input" bind:value={person.fullName} /><p class="tip">Enter complete name as used in IDs or barangay records.</p></div>
+      <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input" type="date" bind:value={person.birthdate} /><p class="tip">Used to compute age and senior citizen status.</p></div>
+      <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input" bind:value={person.sex}><option value="">Select</option><option>Male</option><option>Female</option></select></div>
+      <div class="field-block"><label class="label">Civil Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
+      <div class="field-block"><label class="label">Occupation <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.occupation} /></div>
+      <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input" bind:value={person.contactNo} /><p class="tip">Optional. If provided, use 7 to 15 digits.</p></div>
+      <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input" type="email" bind:value={person.email} /></div>
+      <div class="field-block"><label class="label">Vaccination Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.vaccinationStatus}><option value="">Select</option><option>Fully vaccinated</option><option>Partially vaccinated</option><option>Unvaccinated</option><option>Unknown</option></select><p class="tip">Optional health information for barangay planning.</p></div>
+      <div class="field-block"><label class="label">Blood Type <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.bloodType}><option value="">Select</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option><option>Unknown</option></select></div>
+      <div class="field-block md:col-span-2"><label class="label">Medical Notes <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.medicalNotes} placeholder="e.g. allergies, maintenance medicine, leave blank if none" /><p class="tip">Optional. Add only details you want barangay staff to know for assistance.</p></div>
     </div>
     <div class="grid md:grid-cols-2 gap-3">
       <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 cursor-pointer"><input type="checkbox" checked={person.isPWD} on:change={(event) => handlePwdToggle(event, person)} class="mt-1" /><span><span class="block text-sm font-bold text-slate-700">PWD</span><span class="block text-xs text-slate-400">Requires sector/type and proof.</span></span></label>
@@ -1139,12 +1204,12 @@
     </div>
     {#if person.isPWD}
       <div class="space-y-3">
-        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select class="input" bind:value={person.pwdType} on:change={() => refreshPerson(person)}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
-        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
+        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.pwdType" class="input" bind:value={person.pwdType} on:change={() => refreshPerson(person)}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
+        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="{fieldPrefix}.pwdProof" tabindex="-1">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
       </div>
     {/if}
     {#if isSenior(person)}
-      {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{/if}
+      {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="{fieldPrefix}.seniorProof" tabindex="-1">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{/if}
     {/if}
   </div>
 {/snippet}
@@ -1187,6 +1252,9 @@
   .label { display:block; font-size:.65rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; margin-bottom:.375rem; }
   .input { width:100%; border:2px solid #e2e8f0; background:#f8fafc; border-radius:.75rem; padding:.7rem .8rem; color:#334155; font-size:.875rem; outline:none; }
   .input:focus { border-color:#2563eb; background:white; box-shadow:0 0 0 4px #dbeafe; }
+  .field-block { min-width:0; }
+  .tip { color:#94a3b8; font-size:.68rem; line-height:1.35; margin-top:.35rem; }
+  [data-field]:focus { outline:2px solid #2563eb; outline-offset:3px; }
   .type-card { display:flex; flex-direction:column; gap:.3rem; text-align:left; border:2px solid #e2e8f0; background:#f8fafc; border-radius:.9rem; padding:1rem; color:#475569; }
   .type-card-active { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
   .choice { border:1px solid #e2e8f0; background:white; color:#64748b; border-radius:999px; padding:.55rem .75rem; font-size:.75rem; font-weight:700; }
@@ -1198,5 +1266,13 @@
   .review-nav { border:1px solid #e2e8f0; background:#f8fafc; color:#475569; border-radius:.7rem; padding:.5rem .75rem; font-size:.75rem; font-weight:800; }
   .review-nav:disabled { opacity:.4; cursor:not-allowed; }
   .review-grid { display:grid; grid-template-columns:repeat(1,minmax(0,1fr)); gap:.75rem; }
+  @media (max-width:520px) {
+    .panel { padding:1rem; border-radius:.9rem; gap:.9rem; }
+    .title { font-size:1.05rem; }
+    .input { font-size:1rem; padding:.72rem .8rem; }
+    .tip { font-size:.7rem; }
+    .type-card { padding:.9rem; }
+    .choice { border-radius:.75rem; }
+  }
   @media (min-width:768px) { .review-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>

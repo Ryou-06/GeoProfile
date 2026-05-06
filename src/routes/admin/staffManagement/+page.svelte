@@ -426,12 +426,12 @@ async function handleAddStaff() {
 <!-- The rest of your template remains exactly the same -->
 <!-- ═══════════════════════════════════════════════════════ SUCCESS TOAST ══ -->
 {#if toastVisible}
-  <div class="fixed top-6 right-6 z-[100] flex items-center gap-3 px-5 py-4 bg-emerald-600 text-white rounded-2xl shadow-2xl animate-slide-in">
+  <div class="fixed left-3 right-3 top-3 z-[100] flex items-center gap-3 px-4 py-4 bg-emerald-600 text-white rounded-2xl shadow-2xl animate-slide-in sm:left-auto sm:right-6 sm:top-6 sm:px-5">
     <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
     </svg>
     <span class="text-sm font-bold">{toastMessage}</span>
-    <button on:click={() => toastVisible = false} class="ml-2 opacity-70 hover:opacity-100 transition-opacity">
+    <button type="button" aria-label="Dismiss notification" on:click={() => toastVisible = false} class="ml-auto opacity-70 hover:opacity-100 transition-opacity sm:ml-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
@@ -440,19 +440,19 @@ async function handleAddStaff() {
 {/if}
 
 <!-- ═══════════════════════════════════════════════════════════════ PAGE ══ -->
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-3 sm:p-6">
   <div class="max-w-7xl mx-auto">
 
     <!-- Header -->
     <div class="mb-8">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 class="font-nunito text-3xl font-extrabold text-slate-800">Staff Management</h1>
+          <h1 class="font-nunito text-2xl font-extrabold text-slate-800 sm:text-3xl">Staff Management</h1>
           <p class="text-sm text-slate-500 mt-1">Manage barangay staff accounts</p>
         </div>
         <button
           on:click={() => { resetAddForm(); showAddModal = true; }}
-          class="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95"
+          class="flex w-full items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 sm:w-auto"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -473,7 +473,7 @@ async function handleAddStaff() {
     </div>
 
     <!-- Staff Table -->
-    <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div class="overflow-hidden rounded-2xl bg-white shadow-lg">
       {#if loading}
         <div class="flex items-center justify-center py-20">
           <svg class="w-8 h-8 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -490,7 +490,8 @@ async function handleAddStaff() {
           <p class="text-slate-500 text-sm">Click "Add Staff" to create the first account</p>
         </div>
       {:else}
-        <table class="w-full">
+        <div class="overflow-x-auto">
+        <table class="min-w-[760px] w-full">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Username</th>
@@ -544,6 +545,7 @@ async function handleAddStaff() {
             {/each}
           </tbody>
         </table>
+        </div>
       {/if}
     </div>
   </div>
@@ -551,11 +553,11 @@ async function handleAddStaff() {
 
 <!-- ═══════════════════════════════════════════════════════ ADD STAFF MODAL ══ -->
 {#if showAddModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/50 backdrop-blur-sm">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-4 sm:p-6 max-h-[96dvh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="font-nunito text-2xl font-extrabold text-slate-800">Add Staff Member</h2>
-        <button on:click={() => showAddModal = false} disabled={addLoading} class="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40">
+        <h2 class="font-nunito text-xl font-extrabold text-slate-800 sm:text-2xl">Add Staff Member</h2>
+        <button type="button" aria-label="Close add staff modal" on:click={() => showAddModal = false} disabled={addLoading} class="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -675,7 +677,7 @@ async function handleAddStaff() {
       </div>
 
       <!-- Buttons -->
-      <div class="flex gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           on:click={() => showAddModal = false}
@@ -707,11 +709,11 @@ async function handleAddStaff() {
 
 <!-- ══════════════════════════════════════════════════════ EDIT STAFF MODAL ══ -->
 {#if showEditModal && selectedStaff}
-  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/50 backdrop-blur-sm">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-4 sm:p-6 max-h-[96dvh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="font-nunito text-2xl font-extrabold text-slate-800">Edit Staff Member</h2>
-        <button on:click={() => showEditModal = false} disabled={editLoading} class="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40">
+        <h2 class="font-nunito text-xl font-extrabold text-slate-800 sm:text-2xl">Edit Staff Member</h2>
+        <button type="button" aria-label="Close edit staff modal" on:click={() => showEditModal = false} disabled={editLoading} class="text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -729,7 +731,7 @@ async function handleAddStaff() {
 
       <!-- Username (readonly) -->
       <div class="mb-4">
-        <label class="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Username</label>
+        <span class="block text-xs font-bold text-slate-600 mb-2 uppercase tracking-wider">Username</span>
         <div class="px-4 py-3 rounded-xl bg-slate-100 border-2 border-slate-200 text-sm text-slate-500 font-mono">
           {selectedStaff.username}
         </div>
@@ -813,7 +815,7 @@ async function handleAddStaff() {
       {/if}
 
       <!-- Buttons -->
-      <div class="flex gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           on:click={() => showEditModal = false}
@@ -845,8 +847,8 @@ async function handleAddStaff() {
 
 <!-- ════════════════════════════════════════════════ DELETE CONFIRM MODAL ══ -->
 {#if showDeleteModal && selectedStaff}
-  <div class="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/50 backdrop-blur-sm">
-    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+  <div class="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-4 sm:p-6">
       <div class="flex items-center gap-4 mb-4">
         <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center shrink-0">
           <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -867,7 +869,7 @@ async function handleAddStaff() {
         </p>
       </div>
 
-      <div class="flex gap-3">
+      <div class="flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           on:click={() => { showDeleteModal = false; selectedStaff = null; }}

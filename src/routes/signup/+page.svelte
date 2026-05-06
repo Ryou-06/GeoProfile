@@ -285,7 +285,7 @@
       </div>
 
       <!-- Card - SAME STYLING AS LOGIN -->
-      <div class="bg-white rounded-3xl shadow-2xl px-7 py-8">
+      <div class="bg-white rounded-3xl shadow-2xl px-5 py-7 sm:px-7 sm:py-8">
         
         <!-- Header -->
         <div class="mb-6 text-center">
@@ -358,7 +358,7 @@
         </div>
 
         <!-- Row 1: Full Name + Position - SAME GRID STYLE AS LOGIN -->
-        <div class="grid grid-cols-2 gap-4 mb-4">
+        <div class="grid gap-4 mb-4 sm:grid-cols-2">
           <!-- Full name -->
           <div>
             <label for="name" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
@@ -407,7 +407,7 @@
         </div>
 
         <!-- Row 2: Password + Confirm - SAME GRID STYLE AS LOGIN -->
-        <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="grid gap-4 mb-6 sm:grid-cols-2">
           <!-- Password -->
           <div>
             <label for="password" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
@@ -514,9 +514,9 @@
 
 <!-- Success overlay - SAME AS LOGIN -->
 {#if success}
-  <div class="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center px-6"
+  <div class="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center px-3 sm:px-6"
     style="background: rgba(15,32,96,0.75);">
-    <div class="bg-white rounded-3xl px-8 py-10 text-center max-w-xs w-full shadow-2xl animate-pop-in">
+    <div class="bg-white rounded-3xl px-6 py-8 text-center max-w-xs w-full shadow-2xl animate-pop-in sm:px-8 sm:py-10">
       <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 bg-blue-100">
         <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />

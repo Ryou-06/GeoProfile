@@ -544,24 +544,24 @@
   onDestroy(() => unsub?.());
 </script>
 
-<div class="min-h-screen bg-slate-100 p-6 font-inter">
-  <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+<div class="min-h-screen bg-slate-100 p-3 font-inter sm:p-6">
+  <div class="mb-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-start sm:justify-between">
     <div>
       <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Reports</h1>
       <p class="mt-0.5 text-sm text-slate-500">Generate beneficiary and profiling summaries</p>
     </div>
-    <div class="relative">
+    <div class="relative w-full sm:w-auto">
       <button
         type="button"
         on:click={() => (showExportOptions = !showExportOptions)}
         disabled={loading || exportPreviewRows.length === 0}
-        class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+        class="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
       >
         Export Files
       </button>
 
       {#if showExportOptions}
-        <div class="absolute right-0 z-20 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-2 shadow-lg">
+        <div class="absolute right-0 z-20 mt-2 w-full min-w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-2 shadow-lg sm:w-56">
           <p class="px-4 pb-2 text-xs font-bold text-slate-400">{reportTitle()} export</p>
           <button
             type="button"
@@ -595,7 +595,7 @@
     </div>
   {/if}
 
-  <div class="grid gap-3 md:grid-cols-4">
+  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
     <div class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
       <p class="text-xs font-bold uppercase tracking-widest text-slate-400">Approved</p>
       <p class="mt-2 font-nunito text-3xl font-extrabold text-slate-800">{approved.length.toLocaleString()}</p>
@@ -615,12 +615,12 @@
   </div>
 
   <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div class="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+    <div class="flex flex-nowrap items-center gap-2 overflow-x-auto border-b border-slate-100 pb-4">
       {#each tabs as tab (tab.id)}
         <button
           type="button"
           on:click={() => (activeTab = tab.id)}
-          class="rounded-xl px-3.5 py-2 text-sm font-bold transition-all {activeTab === tab.id
+          class="shrink-0 rounded-xl px-3.5 py-2 text-sm font-bold transition-all {activeTab === tab.id
             ? 'bg-blue-600 text-white shadow-sm'
             : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}"
         >
@@ -632,7 +632,7 @@
     <div class="mt-4 flex flex-wrap items-center gap-3">
       <select
         bind:value={approvalFilter}
-        class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-auto"
       >
         <option value="approved">Approved Only</option>
         <option value="pending">Pending Only</option>
@@ -641,7 +641,7 @@
       </select>
       <select
         bind:value={residentFilter}
-        class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:w-auto"
       >
         <option value="all">All Resident Status</option>
         <option value="active">Active</option>
@@ -792,7 +792,7 @@
       </div>
     {:else}
       <div class="mt-5">
-      <div class="mb-4 flex items-center justify-between gap-3">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 class="font-nunito text-lg font-extrabold text-slate-800">{reportTitle()} Report</h2>
           <p class="text-xs font-semibold text-slate-400">Counts and percentages are based on the active filters.</p>

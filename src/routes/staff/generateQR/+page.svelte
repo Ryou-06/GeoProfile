@@ -408,7 +408,7 @@
   }
 </script>
 
-<div class="p-6 space-y-6 min-h-full bg-slate-100 font-inter">
+<div class="p-3 sm:p-6 space-y-6 min-h-full bg-slate-100 font-inter">
 
   <div>
     <h1 class="font-nunito text-2xl font-extrabold text-slate-800">Generate QR Code</h1>
@@ -418,7 +418,7 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Form -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-5">
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 space-y-5">
 
       <div class="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
         <svg class="w-4 h-4 text-blue-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -440,21 +440,21 @@
 
       <!-- House No -->
       <div>
-        <label class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
+        <label for="house-no" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
           House No. / Unit <span class="text-red-400">*</span>
         </label>
-        <input type="text" bind:value={houseNo} disabled={creating}
+        <input id="house-no" type="text" bind:value={houseNo} disabled={creating}
           placeholder="e.g. 47 or Unit 3B"
           class="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm placeholder-slate-300 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 disabled:opacity-50 transition-all" />
       </div>
 
       <!-- Staff notes -->
       <div>
-        <label class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
+        <label for="staff-notes" class="block text-[0.68rem] font-bold tracking-widest uppercase text-slate-400 mb-2">
           Staff Notes
           <span class="text-slate-300 font-normal normal-case ml-1">(optional · internal only, not shown to resident)</span>
         </label>
-        <textarea bind:value={notes} disabled={creating} rows="2"
+        <textarea id="staff-notes" bind:value={notes} disabled={creating} rows="2"
           placeholder="e.g. Corner house near the basketball court"
           class="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-sm placeholder-slate-300 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100 disabled:opacity-50 transition-all resize-none">
         </textarea>
@@ -487,9 +487,9 @@
         </div>
 
         {#if generatedHousehold && qrDataUrl}
-          <div class="p-5 flex flex-col items-center gap-4">
+          <div class="p-4 sm:p-5 flex flex-col items-center gap-4">
             <div class="border-4 border-slate-100 rounded-2xl p-2 bg-white shadow-inner">
-              <img src={qrDataUrl} alt="QR Code" class="w-52 h-52 rounded-xl" />
+              <img src={qrDataUrl} alt="QR Code" class="h-44 w-44 rounded-xl sm:h-52 sm:w-52" />
             </div>
             <div class="text-center">
               <p class="font-nunito font-black text-slate-800 text-xl tracking-widest">{generatedHousehold.qrId}</p>
@@ -503,7 +503,7 @@
               {/if}
             </div>
 
-            <div class="flex gap-3 w-full">
+            <div class="flex w-full flex-col gap-3 sm:flex-row">
               <button type="button" on:click={handlePrint}
                 class="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold text-white transition-all active:scale-95"
                 style="background:#2563eb;">
@@ -576,7 +576,7 @@
 <!-- Print Modal -->
 {#if showPrintModal}
   <div
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"
     role="button"
     tabindex="0"
     aria-label="Close print preview"
@@ -586,11 +586,11 @@
     }}
   >
     <div
-      class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[96dvh] overflow-hidden flex flex-col"
       role="presentation"
       on:click|stopPropagation
     >
-      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+      <div class="flex items-center justify-between px-4 py-4 border-b border-slate-200 sm:px-6">
         <h3 class="font-nunito font-extrabold text-slate-800">Print Preview</h3>
         <button type="button" aria-label="Close print preview" on:click={() => showPrintModal = false} class="text-slate-400 hover:text-slate-600 transition-colors">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -599,13 +599,13 @@
         </button>
       </div>
       
-      <div class="flex-1 overflow-auto p-6 bg-slate-100">
+      <div class="flex-1 overflow-auto p-3 bg-slate-100 sm:p-6">
         <div class="bg-white rounded-xl shadow-lg mx-auto" style="max-width: 700px;">
           <iframe id="print-frame" class="w-full h-[320px] border-0" title="QR print preview" srcdoc={printContent}></iframe>
         </div>
       </div>
       
-      <div class="flex gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+      <div class="flex flex-col gap-3 px-4 py-4 border-t border-slate-200 bg-slate-50 sm:flex-row sm:px-6">
         <button type="button" on:click={() => showPrintModal = false}
           class="flex-1 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 bg-white border border-slate-300 hover:bg-slate-100 transition-all">
           Cancel

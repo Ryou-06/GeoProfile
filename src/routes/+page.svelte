@@ -277,7 +277,7 @@
       </div>
 
       <!-- Card -->
-      <div class="bg-white rounded-3xl shadow-2xl px-7 py-8">
+      <div class="bg-white rounded-3xl shadow-2xl px-5 py-7 sm:px-7 sm:py-8">
         
         <!-- Header -->
         <div class="mb-6 text-center">
@@ -464,9 +464,9 @@
 
 <!-- Success overlay -->
 {#if success}
-  <div class="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center px-6"
+  <div class="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center px-3 sm:px-6"
     style="background: rgba(15,32,96,0.75);">
-    <div class="bg-white rounded-3xl px-8 py-10 text-center max-w-xs w-full shadow-2xl animate-pop-in">
+    <div class="bg-white rounded-3xl px-6 py-8 text-center max-w-xs w-full shadow-2xl animate-pop-in sm:px-8 sm:py-10">
       <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4
                   {role === 'admin' ? 'bg-blue-100' : 'bg-emerald-100'}">
         {#if role === 'admin'}
