@@ -177,6 +177,14 @@
     return message;
   }
 
+  function fieldInvalid(field: string) {
+    return invalidField === field;
+  }
+
+  function fieldError(field: string) {
+    return fieldInvalid(field) ? errorMsg : '';
+  }
+
   function scrollToInvalidField() {
     if (!invalidField) return;
     setTimeout(() => {
@@ -957,7 +965,7 @@
             <h2 class="title">Household Type and Consent</h2>
             <p class="sub">Choose what kind of profile this QR session is for.</p>
           </div>
-          <div class="grid md:grid-cols-3 gap-3" data-field="householdType" tabindex="-1">
+          <div class="grid md:grid-cols-3 gap-3 rounded-xl {fieldInvalid('householdType') ? 'group-error p-2' : ''}" data-field="householdType" tabindex="-1">
             <button type="button" on:click={() => (householdType = 'residential')} class="type-card {householdType === 'residential' ? 'type-card-active' : ''}">
               <span class="font-bold text-sm">Residential</span><span class="text-xs opacity-70">Family or individual living household</span>
             </button>
@@ -968,10 +976,12 @@
               <span class="font-bold text-sm">Boarding / Rental</span><span class="text-xs opacity-70">Rental room, apartment, or boarding house</span>
             </button>
           </div>
-          <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 cursor-pointer">
+          {@render FieldError('householdType')}
+          <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 cursor-pointer {fieldInvalid('agreedToTerms') ? 'group-error' : ''}">
             <input type="checkbox" bind:checked={agreedToTerms} data-field="agreedToTerms" class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-700" />
             <span class="text-xs text-slate-600 leading-relaxed">I agree to voluntarily submit this information to the GeoProfile system of Barangay Pag-Asa for profiling, records, mapping, and verification.</span>
           </label>
+          {@render FieldError('agreedToTerms')}
         </section>
       {:else if step === 2}
         <section class="panel">
@@ -981,8 +991,8 @@
             <p class="sub">The fields below change based on the selected profile type.</p>
           </div>
           <div class="grid md:grid-cols-2 gap-3">
-            <div class="field-block"><label class="label" for="houseNo">House No. / Unit / Block <span class="text-red-400">*</span></label><input id="houseNo" data-field="houseNo" class="input" bind:value={houseNo} /><p class="tip">Use the number or unit shown at the house, gate, or building.</p></div>
-            <div class="field-block"><label class="label" for="street">Street <span class="text-red-400">*</span></label><select id="street" data-field="street" class="input" bind:value={street}><option value="">Select street</option>{#each streets as item (item)}<option value={item}>{item}</option>{/each}</select><p class="tip">Choose the street where the household is located.</p></div>
+            <div class="field-block"><label class="label" for="houseNo">House No. / Unit / Block <span class="text-red-400">*</span></label><input id="houseNo" data-field="houseNo" class="input {fieldInvalid('houseNo') ? 'input-error' : ''}" bind:value={houseNo} />{@render FieldError('houseNo')}<p class="tip">Use the number or unit shown at the house, gate, or building.</p></div>
+            <div class="field-block"><label class="label" for="street">Street <span class="text-red-400">*</span></label><select id="street" data-field="street" class="input {fieldInvalid('street') ? 'input-error' : ''}" bind:value={street}><option value="">Select street</option>{#each streets as item (item)}<option value={item}>{item}</option>{/each}</select>{@render FieldError('street')}<p class="tip">Choose the street where the household is located.</p></div>
             <div class="field-block md:col-span-2"><label class="label" for="landmark">Landmark <span class="text-slate-300 normal-case">(optional)</span></label><input id="landmark" data-field="landmark" class="input" bind:value={landmark} placeholder="e.g. near chapel, beside store, blue gate" /><p class="tip">Optional, but helpful if the house is hard to find or has no clear number.</p></div>
           </div>
           <div class="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5">
@@ -992,9 +1002,9 @@
 
           {#if householdType === 'residential'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div class="field-block"><label class="label" for="dwellingType">Dwelling Type <span class="text-red-400">*</span></label><select id="dwellingType" data-field="residential.dwellingType" class="input" bind:value={residentialInfo.dwellingType}><option value="">Select</option><option>Single house</option><option>Duplex</option><option>Informal dwelling</option><option>Other residential dwelling</option></select><p class="tip">For apartment, room, or boarding house, go back and choose Boarding / Rental.</p></div>
-              <div class="field-block"><label class="label" for="ownershipStatus">Ownership Status <span class="text-red-400">*</span></label><select id="ownershipStatus" data-field="residential.ownershipStatus" class="input" bind:value={residentialInfo.ownershipStatus}><option value="">Select</option><option>Owned</option><option>Rented</option><option>Living with relatives</option><option>Caretaker</option><option>Other</option></select><p class="tip">Select the arrangement that best describes who uses the home.</p></div>
-              <div class="field-block"><label class="label" for="yearsOfStay">Years of Stay <span class="text-slate-300 normal-case">(optional)</span></label><input id="yearsOfStay" data-field="residential.yearsOfStay" class="input" type="number" min="0" bind:value={residentialInfo.yearsOfStay} /><p class="tip">Approximate number is okay.</p></div>
+              <div class="field-block"><label class="label" for="dwellingType">Dwelling Type <span class="text-red-400">*</span></label><select id="dwellingType" data-field="residential.dwellingType" class="input {fieldInvalid('residential.dwellingType') ? 'input-error' : ''}" bind:value={residentialInfo.dwellingType}><option value="">Select</option><option>Single house</option><option>Duplex</option><option>Informal dwelling</option><option>Other residential dwelling</option></select>{@render FieldError('residential.dwellingType')}<p class="tip">For apartment, room, or boarding house, go back and choose Boarding / Rental.</p></div>
+              <div class="field-block"><label class="label" for="ownershipStatus">Ownership Status <span class="text-red-400">*</span></label><select id="ownershipStatus" data-field="residential.ownershipStatus" class="input {fieldInvalid('residential.ownershipStatus') ? 'input-error' : ''}" bind:value={residentialInfo.ownershipStatus}><option value="">Select</option><option>Owned</option><option>Rented</option><option>Living with relatives</option><option>Caretaker</option><option>Other</option></select>{@render FieldError('residential.ownershipStatus')}<p class="tip">Select the arrangement that best describes who uses the home.</p></div>
+              <div class="field-block"><label class="label" for="yearsOfStay">Years of Stay <span class="text-slate-300 normal-case">(optional)</span></label><input id="yearsOfStay" data-field="residential.yearsOfStay" class="input {fieldInvalid('residential.yearsOfStay') ? 'input-error' : ''}" type="number" min="0" bind:value={residentialInfo.yearsOfStay} />{@render FieldError('residential.yearsOfStay')}<p class="tip">Approximate number is okay.</p></div>
               <div class="field-block"><label class="label" for="incomeRange">Monthly Income Range <span class="text-slate-300 normal-case">(optional)</span></label><select id="incomeRange" class="input" bind:value={residentialInfo.monthlyIncomeRange}><option value="">Select</option><option>Below 10,000</option><option>10,000 - 20,000</option><option>20,001 - 40,000</option><option>Above 40,000</option><option>Prefer not to say</option></select><p class="tip">This helps with barangay planning and assistance, but may be skipped.</p></div>
             </div>
             <div>
@@ -1007,23 +1017,23 @@
             </div>
           {:else if householdType === 'business'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div class="field-block"><label class="label">Business Name <span class="text-red-400">*</span></label><input data-field="business.businessName" class="input" bind:value={businessInfo.businessName} /><p class="tip">Use the store or establishment name.</p></div>
-              <div class="field-block"><label class="label">Owner Name <span class="text-red-400">*</span></label><input data-field="business.ownerName" class="input" bind:value={businessInfo.ownerName} /><p class="tip">Name of owner or person in charge.</p></div>
-              <div class="field-block"><label class="label">Business Type <span class="text-red-400">*</span></label><input data-field="business.businessType" class="input" bind:value={businessInfo.businessType} placeholder="e.g. Sari-sari store, eatery" /><p class="tip">Describe what kind of business operates here.</p></div>
+              <div class="field-block"><label class="label">Business Name <span class="text-red-400">*</span></label><input data-field="business.businessName" class="input {fieldInvalid('business.businessName') ? 'input-error' : ''}" bind:value={businessInfo.businessName} />{@render FieldError('business.businessName')}<p class="tip">Use the store or establishment name.</p></div>
+              <div class="field-block"><label class="label">Owner Name <span class="text-red-400">*</span></label><input data-field="business.ownerName" class="input {fieldInvalid('business.ownerName') ? 'input-error' : ''}" bind:value={businessInfo.ownerName} />{@render FieldError('business.ownerName')}<p class="tip">Name of owner or person in charge.</p></div>
+              <div class="field-block"><label class="label">Business Type <span class="text-red-400">*</span></label><input data-field="business.businessType" class="input {fieldInvalid('business.businessType') ? 'input-error' : ''}" bind:value={businessInfo.businessType} placeholder="e.g. Sari-sari store, eatery" />{@render FieldError('business.businessType')}<p class="tip">Describe what kind of business operates here.</p></div>
               <div class="field-block"><label class="label">Permit Number <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={businessInfo.permitNo} /><p class="tip">Leave blank if not available.</p></div>
-              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={businessInfo.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">If provided, enter exactly 11 digits.</p></div>
-              <div class="field-block"><label class="label">No. of Employees <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.employeesCount" class="input" type="number" min="0" bind:value={businessInfo.employeesCount} /></div>
-              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.operatingYears" class="input" type="number" min="0" bind:value={businessInfo.operatingYears} /></div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.contactNo" class="input {fieldInvalid('business.contactNo') ? 'input-error' : ''}" inputmode="numeric" maxlength="11" bind:value={businessInfo.contactNo} placeholder="09XXXXXXXXX" />{@render FieldError('business.contactNo')}<p class="tip">If provided, enter exactly 11 digits.</p></div>
+              <div class="field-block"><label class="label">No. of Employees <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.employeesCount" class="input {fieldInvalid('business.employeesCount') ? 'input-error' : ''}" type="number" min="0" bind:value={businessInfo.employeesCount} />{@render FieldError('business.employeesCount')}</div>
+              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.operatingYears" class="input {fieldInvalid('business.operatingYears') ? 'input-error' : ''}" type="number" min="0" bind:value={businessInfo.operatingYears} />{@render FieldError('business.operatingYears')}</div>
             </div>
           {:else if householdType === 'boarding'}
             <div class="grid md:grid-cols-2 gap-3">
-              <div class="field-block"><label class="label">Property Name <span class="text-red-400">*</span></label><input data-field="boarding.propertyName" class="input" bind:value={boardingInfo.propertyName} /><p class="tip">Apartment, room rental, or boarding house name.</p></div>
-              <div class="field-block"><label class="label">Owner / Manager <span class="text-red-400">*</span></label><input data-field="boarding.ownerName" class="input" bind:value={boardingInfo.ownerName} /></div>
-              <div class="field-block"><label class="label">Number of Rooms <span class="text-red-400">*</span></label><input data-field="boarding.roomsCount" class="input" type="number" min="1" bind:value={boardingInfo.roomsCount} /></div>
-              <div class="field-block"><label class="label">Tenant Capacity <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.tenantCapacity" class="input" type="number" min="0" bind:value={boardingInfo.tenantCapacity} /></div>
-              <div class="field-block"><label class="label">Current Tenants <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.currentTenants" class="input" type="number" min="0" bind:value={boardingInfo.currentTenants} /></div>
-              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={boardingInfo.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">If provided, enter exactly 11 digits.</p></div>
-              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.operatingYears" class="input" type="number" min="0" bind:value={boardingInfo.operatingYears} /></div>
+              <div class="field-block"><label class="label">Property Name <span class="text-red-400">*</span></label><input data-field="boarding.propertyName" class="input {fieldInvalid('boarding.propertyName') ? 'input-error' : ''}" bind:value={boardingInfo.propertyName} />{@render FieldError('boarding.propertyName')}<p class="tip">Apartment, room rental, or boarding house name.</p></div>
+              <div class="field-block"><label class="label">Owner / Manager <span class="text-red-400">*</span></label><input data-field="boarding.ownerName" class="input {fieldInvalid('boarding.ownerName') ? 'input-error' : ''}" bind:value={boardingInfo.ownerName} />{@render FieldError('boarding.ownerName')}</div>
+              <div class="field-block"><label class="label">Number of Rooms <span class="text-red-400">*</span></label><input data-field="boarding.roomsCount" class="input {fieldInvalid('boarding.roomsCount') ? 'input-error' : ''}" type="number" min="1" bind:value={boardingInfo.roomsCount} />{@render FieldError('boarding.roomsCount')}</div>
+              <div class="field-block"><label class="label">Tenant Capacity <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.tenantCapacity" class="input {fieldInvalid('boarding.tenantCapacity') ? 'input-error' : ''}" type="number" min="0" bind:value={boardingInfo.tenantCapacity} />{@render FieldError('boarding.tenantCapacity')}</div>
+              <div class="field-block"><label class="label">Current Tenants <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.currentTenants" class="input {fieldInvalid('boarding.currentTenants') ? 'input-error' : ''}" type="number" min="0" bind:value={boardingInfo.currentTenants} />{@render FieldError('boarding.currentTenants')}</div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.contactNo" class="input {fieldInvalid('boarding.contactNo') ? 'input-error' : ''}" inputmode="numeric" maxlength="11" bind:value={boardingInfo.contactNo} placeholder="09XXXXXXXXX" />{@render FieldError('boarding.contactNo')}<p class="tip">If provided, enter exactly 11 digits.</p></div>
+              <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.operatingYears" class="input {fieldInvalid('boarding.operatingYears') ? 'input-error' : ''}" type="number" min="0" bind:value={boardingInfo.operatingYears} />{@render FieldError('boarding.operatingYears')}</div>
             </div>
           {/if}
         </section>
@@ -1034,7 +1044,7 @@
             <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">This profile type does not require parent/head details. Continue to the next part.</div>
           {:else}
             <div class="grid md:grid-cols-3 gap-3">
-              <div class="field-block"><label class="label">Family Status <span class="text-red-400">*</span></label><select data-field="familySetup" class="input" bind:value={familySetup} on:change={syncFamilySetup}><option value="both">Both parents present</option><option value="mother_only">Mother only</option><option value="father_only">Father only</option><option value="guardian">Guardian only</option></select><p class="tip">Choose who acts as the household head or guardian.</p></div>
+              <div class="field-block"><label class="label">Family Status <span class="text-red-400">*</span></label><select data-field="familySetup" class="input {fieldInvalid('familySetup') ? 'input-error' : ''}" bind:value={familySetup} on:change={syncFamilySetup}><option value="both">Both parents present</option><option value="mother_only">Mother only</option><option value="father_only">Father only</option><option value="guardian">Guardian only</option></select>{@render FieldError('familySetup')}<p class="tip">Choose who acts as the household head or guardian.</p></div>
               <div class="field-block"><label class="label">Father Status <span class="text-red-400">*</span></label><select class="input" bind:value={fatherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
               <div class="field-block"><label class="label">Mother Status <span class="text-red-400">*</span></label><select class="input" bind:value={motherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
             </div>
@@ -1050,7 +1060,7 @@
               <div class="rounded-xl border border-violet-200 bg-violet-50 p-4 space-y-3">
                 <p class="text-sm font-bold text-violet-700">Single parent / guardian detected</p>
                 <p class="text-xs text-violet-600">Upload solo parent ID, death certificate, barangay certification, or supporting document.</p>
-                {#if singleParentProofPreview}<img src={singleParentProofPreview} alt="Single parent proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="singleParentProof" tabindex="-1">Upload Single Parent Proof<input type="file" accept="image/*" on:change={handleSingleParentProofChange} class="hidden" /></label>{/if}
+                {#if singleParentProofPreview}<img src={singleParentProofPreview} alt="Single parent proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload {fieldInvalid('singleParentProof') ? 'upload-error' : ''}" data-field="singleParentProof" tabindex="-1">Upload Single Parent Proof<input type="file" accept="image/*" on:change={handleSingleParentProofChange} class="hidden" /></label>{@render FieldError('singleParentProof')}{/if}
               </div>
             {/if}
           {/if}
@@ -1081,11 +1091,12 @@
               <button type="button" aria-label="Remove photo" on:click={() => { housePhoto = null; housePhotoPreview = ''; }} class="absolute top-2 right-2 rounded-full bg-red-500 text-white w-8 h-8 font-bold">x</button>
             </div>
           {:else}
-            <label data-field="housePhoto" tabindex="-1" class="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all bg-slate-50 border-slate-300">
+            <label data-field="housePhoto" tabindex="-1" class="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all {fieldInvalid('housePhoto') ? 'upload-error' : 'bg-slate-50 border-slate-300'}">
               <div class="w-14 h-14 rounded-2xl bg-slate-200 flex items-center justify-center text-slate-500 font-bold">CAM</div>
               <div class="text-center"><p class="text-sm font-bold text-slate-700">Take Photo or Upload</p><p class="text-xs text-slate-400 mt-0.5">Front view, max 15MB</p></div>
               <input type="file" accept="image/*" capture="environment" on:change={handlePhotoChange} class="hidden" />
             </label>
+            {@render FieldError('housePhoto')}
           {/if}
         </section>
       {:else if step === 6}
@@ -1195,18 +1206,24 @@
   {/if}
 </div>
 
+{#snippet FieldError(field: string)}
+  {#if fieldError(field)}
+    <p class="field-error">{fieldError(field)}</p>
+  {/if}
+{/snippet}
+
 {#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false, fieldPrefix = title)}
   <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
     <div class="grid md:grid-cols-2 gap-3">
-      {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input" bind:value={(person as FamilyMember).relationship} /><p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
-      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input" bind:value={person.fullName} /><p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
-      <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input" type="date" bind:value={person.birthdate} /><p class="tip">Used to compute age and senior citizen status.</p></div>
-      <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input" bind:value={person.sex}><option value="">Select</option><option>Male</option><option>Female</option></select></div>
+      {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input {fieldInvalid(`${fieldPrefix}.relationship`) ? 'input-error' : ''}" bind:value={(person as FamilyMember).relationship} />{@render FieldError(`${fieldPrefix}.relationship`)}<p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
+      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input {fieldInvalid(`${fieldPrefix}.fullName`) ? 'input-error' : ''}" bind:value={person.fullName} />{@render FieldError(`${fieldPrefix}.fullName`)}<p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
+      <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" bind:value={person.birthdate} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Used to compute age and senior citizen status.</p></div>
+      <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input {fieldInvalid(`${fieldPrefix}.sex`) ? 'input-error' : ''}" bind:value={person.sex}><option value="">Select</option><option>Male</option><option>Female</option></select>{@render FieldError(`${fieldPrefix}.sex`)}</div>
       <div class="field-block"><label class="label">Civil Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
       <div class="field-block"><label class="label">Occupation <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.occupation} /></div>
-      <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={person.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">Optional. If provided, enter exactly 11 digits.</p></div>
-      <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input" type="email" bind:value={person.email} placeholder="name@gmail.com" /><p class="tip">Optional. Gmail address only.</p></div>
+      <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input {fieldInvalid(`${fieldPrefix}.contactNo`) ? 'input-error' : ''}" inputmode="numeric" maxlength="11" bind:value={person.contactNo} placeholder="09XXXXXXXXX" />{@render FieldError(`${fieldPrefix}.contactNo`)}<p class="tip">Optional. If provided, enter exactly 11 digits.</p></div>
+      <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input {fieldInvalid(`${fieldPrefix}.email`) ? 'input-error' : ''}" type="email" bind:value={person.email} placeholder="name@gmail.com" />{@render FieldError(`${fieldPrefix}.email`)}<p class="tip">Optional. Gmail address only.</p></div>
       <div class="field-block"><label class="label">Vaccination Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.vaccinationStatus}><option value="">Select</option><option>Fully vaccinated</option><option>Partially vaccinated</option><option>Unvaccinated</option><option>Unknown</option></select><p class="tip">Optional health information for barangay planning.</p></div>
       <div class="field-block"><label class="label">Blood Type <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.bloodType}><option value="">Select</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option><option>Unknown</option></select></div>
       <div class="field-block md:col-span-2"><label class="label">Medical Notes <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.medicalNotes} placeholder="e.g. allergies, maintenance medicine, leave blank if none" /><p class="tip">Optional. Add only details you want barangay staff to know for assistance.</p></div>
@@ -1220,12 +1237,12 @@
     </div>
     {#if person.isPWD}
       <div class="space-y-3">
-        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.pwdType" class="input" bind:value={person.pwdType} on:change={() => refreshPerson(person)}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select></div>
-        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="{fieldPrefix}.pwdProof" tabindex="-1">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{/if}
+        <div><label class="label">PWD Sector / Type <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.pwdType" class="input {fieldInvalid(`${fieldPrefix}.pwdType`) ? 'input-error' : ''}" bind:value={person.pwdType} on:change={() => refreshPerson(person)}><option value="">Select sector</option><option>Physical Disability</option><option>Visual Impairment</option><option>Hearing Impairment</option><option>Intellectual Disability</option><option>Psychosocial Disability</option><option>Learning Disability</option><option>Speech and Language Impairment</option><option>Multiple Disability</option></select>{@render FieldError(`${fieldPrefix}.pwdType`)}</div>
+        {#if person.pwdProofPreview}<img src={person.pwdProofPreview} alt="PWD proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload {fieldInvalid(`${fieldPrefix}.pwdProof`) ? 'upload-error' : ''}" data-field="{fieldPrefix}.pwdProof" tabindex="-1">{pwdProofLabel(person)}<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'pwd')} class="hidden" /></label>{@render FieldError(`${fieldPrefix}.pwdProof`)}{/if}
       </div>
     {/if}
     {#if isSenior(person)}
-      {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload" data-field="{fieldPrefix}.seniorProof" tabindex="-1">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{/if}
+      {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload {fieldInvalid(`${fieldPrefix}.seniorProof`) ? 'upload-error' : ''}" data-field="{fieldPrefix}.seniorProof" tabindex="-1">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{@render FieldError(`${fieldPrefix}.seniorProof`)}{/if}
     {/if}
   </div>
 {/snippet}
@@ -1268,14 +1285,19 @@
   .label { display:block; font-size:.65rem; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; margin-bottom:.375rem; }
   .input { width:100%; border:2px solid #e2e8f0; background:#f8fafc; border-radius:.75rem; padding:.7rem .8rem; color:#334155; font-size:.875rem; outline:none; }
   .input:focus { border-color:#2563eb; background:white; box-shadow:0 0 0 4px #dbeafe; }
+  .input-error { border-color:#ef4444; background:#fff1f2; color:#991b1b; }
+  .input-error:focus { border-color:#dc2626; box-shadow:0 0 0 4px #fee2e2; background:white; }
   .field-block { min-width:0; }
   .tip { color:#94a3b8; font-size:.68rem; line-height:1.35; margin-top:.35rem; }
+  .field-error { color:#dc2626; font-size:.72rem; font-weight:800; line-height:1.35; margin-top:.35rem; }
   [data-field]:focus { outline:2px solid #2563eb; outline-offset:3px; }
+  .group-error { border-color:#ef4444 !important; background:#fff1f2 !important; }
   .type-card { display:flex; flex-direction:column; gap:.3rem; text-align:left; border:2px solid #e2e8f0; background:#f8fafc; border-radius:.9rem; padding:1rem; color:#475569; }
   .type-card-active { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
   .choice { border:1px solid #e2e8f0; background:white; color:#64748b; border-radius:999px; padding:.55rem .75rem; font-size:.75rem; font-weight:700; }
   .choice-active { border-color:#059669; background:#d1fae5; color:#047857; }
   .upload { display:flex; align-items:center; justify-content:center; min-height:5rem; border:2px dashed #cbd5e1; border-radius:.75rem; background:white; color:#475569; font-size:.8rem; font-weight:800; cursor:pointer; }
+  .upload-error { border-color:#ef4444; background:#fff1f2; color:#991b1b; }
   .review-tabs { display:flex; gap:.5rem; overflow-x:auto; padding-bottom:.25rem; }
   .review-tab { flex:0 0 auto; border:1px solid #e2e8f0; background:#f8fafc; color:#64748b; border-radius:999px; padding:.5rem .75rem; font-size:.72rem; font-weight:800; }
   .review-tab-active { border-color:#2563eb; background:#dbeafe; color:#1d4ed8; }
