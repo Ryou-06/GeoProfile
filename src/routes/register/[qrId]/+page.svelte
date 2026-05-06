@@ -192,7 +192,6 @@
   function setFieldError(field: string, message: string) {
     if (message) {
       fieldErrors = { ...fieldErrors, [field]: message };
-      invalidField = field;
       errorMsg = '';
       return;
     }
@@ -309,6 +308,10 @@
 
   function handleLivePersonInput(event: Event, person: PersonProfile | FamilyMember, fieldPrefix: string, key: string, force = false) {
     const target = event.currentTarget as HTMLInputElement | HTMLSelectElement;
+    if (key === 'relationship' && 'relationship' in person) person.relationship = target.value;
+    else if (key in person) {
+      (person as unknown as Record<string, string>)[key] = target.value;
+    }
     validatePersonField(person, fieldPrefix, key, force, target.value);
     refreshPerson(person);
   }
@@ -1432,6 +1435,7 @@
   .tip { color:#94a3b8; font-size:.68rem; line-height:1.35; margin-top:.35rem; }
   .field-error { color:#dc2626; font-size:.72rem; font-weight:800; line-height:1.35; margin-top:.35rem; }
   [data-field]:focus { outline:2px solid #2563eb; outline-offset:3px; }
+  [data-field].input-error:focus { outline:2px solid #dc2626; outline-offset:3px; }
   .group-error { border-color:#ef4444 !important; background:#fff1f2 !important; }
   .type-card { display:flex; flex-direction:column; gap:.3rem; text-align:left; border:2px solid #e2e8f0; background:#f8fafc; border-radius:.9rem; padding:1rem; color:#475569; }
   .type-card-active { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
