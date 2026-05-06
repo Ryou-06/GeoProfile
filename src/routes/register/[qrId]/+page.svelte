@@ -175,20 +175,25 @@
 
   function markInvalid(field: string, message: string) {
     invalidField = field;
-    setFieldError(field, message);
+    setFieldError(field, message, message);
     return message;
   }
 
-  function setFieldError(field: string, message: string) {
+  function setFieldError(field: string, message: string, topMessage = message) {
     if (message) {
       fieldErrors = { ...fieldErrors, [field]: message };
+      invalidField = field;
+      errorMsg = topMessage;
       return;
     }
     if (!(field in fieldErrors)) return;
     const nextErrors = { ...fieldErrors };
     delete nextErrors[field];
     fieldErrors = nextErrors;
-    if (invalidField === field) invalidField = '';
+    if (invalidField === field) {
+      invalidField = '';
+      errorMsg = '';
+    }
   }
 
   function fieldInvalid(field: string) {
@@ -246,9 +251,21 @@
     return Number.isFinite(number) && number >= 0;
   }
 
+  function personLabelFromPrefix(fieldPrefix: string) {
+    if (fieldPrefix === 'father') return 'Father/head';
+    if (fieldPrefix === 'mother') return 'Mother/head';
+    if (fieldPrefix.startsWith('member-')) {
+      const index = Number(fieldPrefix.replace('member-', ''));
+      const label = householdType === 'boarding' ? 'Tenant/boarder' : 'Family member';
+      return `${label} ${Number.isFinite(index) ? index + 1 : ''}`.trim();
+    }
+    return 'Resident';
+  }
+
   function validatePersonField(person: PersonProfile | FamilyMember, fieldPrefix: string, key: string, force = false, valueOverride?: string) {
     const field = `${fieldPrefix}.${key}`;
     let message = '';
+    const label = personLabelFromPrefix(fieldPrefix);
     const value = valueOverride ?? '';
     const relationship = 'relationship' in person && valueOverride !== undefined ? value : 'relationship' in person ? person.relationship : '';
     const fullName = key === 'fullName' && valueOverride !== undefined ? value : person.fullName;
@@ -284,7 +301,7 @@
       message = 'PWD type is required.';
     }
 
-    setFieldError(field, message);
+    setFieldError(field, message, message ? `${label}: ${message.charAt(0).toLowerCase()}${message.slice(1)}` : '');
   }
 
   function seniorStatusText(person: PersonProfile) {
