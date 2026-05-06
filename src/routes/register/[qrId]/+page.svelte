@@ -189,13 +189,26 @@
 
   function isValidEmail(value: string) {
     if (!value.trim()) return true;
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+    return /^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(value.trim());
   }
 
   function isValidContactNo(value: string) {
     if (!value.trim()) return true;
     const digits = value.replace(/[^\d]/g, '');
-    return digits.length >= 7 && digits.length <= 15;
+    return digits.length === 11;
+  }
+
+  function isValidPersonName(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    if (/\d/.test(trimmed)) return false;
+    if (!/[a-zA-Z]/.test(trimmed)) return false;
+    return /^[a-zA-ZÀ-ÿÑñ\s.'-]+$/.test(trimmed);
+  }
+
+  function isValidRequiredText(value: string) {
+    const trimmed = value.trim();
+    return trimmed.length > 1 && /[a-zA-Z0-9]/.test(trimmed);
   }
 
   function isValidBirthdate(value: string) {
@@ -533,11 +546,12 @@
 
   function personIsValid(person: PersonProfile, label: string, fieldPrefix: string) {
     if (!person.fullName.trim()) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name is required.`);
+    if (!isValidPersonName(person.fullName)) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name must use letters only, not numbers.`);
     if (!person.birthdate) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: birthdate is required.`);
     if (!isValidBirthdate(person.birthdate)) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: enter a valid birthdate.`);
     if (!person.sex) return markInvalid(`${fieldPrefix}.sex`, `${label}: sex is required.`);
-    if (!isValidContactNo(person.contactNo)) return markInvalid(`${fieldPrefix}.contactNo`, `${label}: contact number must be 7 to 15 digits.`);
-    if (!isValidEmail(person.email)) return markInvalid(`${fieldPrefix}.email`, `${label}: enter a valid email address.`);
+    if (!isValidContactNo(person.contactNo)) return markInvalid(`${fieldPrefix}.contactNo`, `${label}: contact number must be exactly 11 digits.`);
+    if (!isValidEmail(person.email)) return markInvalid(`${fieldPrefix}.email`, `${label}: email must be a valid Gmail address, like name@gmail.com.`);
     if (person.isPWD && !person.pwdType) return markInvalid(`${fieldPrefix}.pwdType`, `${label}: PWD type is required.`);
     if (person.isPWD && !person.pwdProof) return markInvalid(`${fieldPrefix}.pwdProof`, `${label}: PWD proof is required.`);
     if (isSenior(person) && !person.seniorProof) return markInvalid(`${fieldPrefix}.seniorProof`, `${label}: senior proof is required.`);
@@ -562,20 +576,22 @@
         if (!isNonNegativeNumber(residentialInfo.yearsOfStay)) return markInvalid('residential.yearsOfStay', 'Years of stay must be a valid number.');
       }
       if (householdType === 'business') {
-        if (!businessInfo.businessName.trim()) return markInvalid('business.businessName', 'Business name is required.');
+        if (!isValidRequiredText(businessInfo.businessName)) return markInvalid('business.businessName', 'Business name is required.');
         if (!businessInfo.ownerName.trim()) return markInvalid('business.ownerName', 'Owner name is required.');
-        if (!businessInfo.businessType.trim()) return markInvalid('business.businessType', 'Business type is required.');
-        if (!isValidContactNo(businessInfo.contactNo)) return markInvalid('business.contactNo', 'Contact number must be 7 to 15 digits.');
+        if (!isValidPersonName(businessInfo.ownerName)) return markInvalid('business.ownerName', 'Owner name must use letters only, not numbers.');
+        if (!isValidRequiredText(businessInfo.businessType)) return markInvalid('business.businessType', 'Business type is required.');
+        if (!isValidContactNo(businessInfo.contactNo)) return markInvalid('business.contactNo', 'Contact number must be exactly 11 digits.');
         if (!isNonNegativeNumber(businessInfo.employeesCount)) return markInvalid('business.employeesCount', 'Number of employees must be a valid number.');
         if (!isNonNegativeNumber(businessInfo.operatingYears)) return markInvalid('business.operatingYears', 'Years operating must be a valid number.');
       }
       if (householdType === 'boarding') {
-        if (!boardingInfo.propertyName.trim()) return markInvalid('boarding.propertyName', 'Property name is required.');
+        if (!isValidRequiredText(boardingInfo.propertyName)) return markInvalid('boarding.propertyName', 'Property name is required.');
         if (!boardingInfo.ownerName.trim()) return markInvalid('boarding.ownerName', 'Owner or manager is required.');
+        if (!isValidPersonName(boardingInfo.ownerName)) return markInvalid('boarding.ownerName', 'Owner or manager name must use letters only, not numbers.');
         if (!boardingInfo.roomsCount || Number(boardingInfo.roomsCount) <= 0) return markInvalid('boarding.roomsCount', 'Number of rooms is required.');
         if (!isNonNegativeNumber(boardingInfo.tenantCapacity)) return markInvalid('boarding.tenantCapacity', 'Tenant capacity must be a valid number.');
         if (!isNonNegativeNumber(boardingInfo.currentTenants)) return markInvalid('boarding.currentTenants', 'Current tenants must be a valid number.');
-        if (!isValidContactNo(boardingInfo.contactNo)) return markInvalid('boarding.contactNo', 'Contact number must be 7 to 15 digits.');
+        if (!isValidContactNo(boardingInfo.contactNo)) return markInvalid('boarding.contactNo', 'Contact number must be exactly 11 digits.');
         if (!isNonNegativeNumber(boardingInfo.operatingYears)) return markInvalid('boarding.operatingYears', 'Years operating must be a valid number.');
       }
     }
@@ -995,7 +1011,7 @@
               <div class="field-block"><label class="label">Owner Name <span class="text-red-400">*</span></label><input data-field="business.ownerName" class="input" bind:value={businessInfo.ownerName} /><p class="tip">Name of owner or person in charge.</p></div>
               <div class="field-block"><label class="label">Business Type <span class="text-red-400">*</span></label><input data-field="business.businessType" class="input" bind:value={businessInfo.businessType} placeholder="e.g. Sari-sari store, eatery" /><p class="tip">Describe what kind of business operates here.</p></div>
               <div class="field-block"><label class="label">Permit Number <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={businessInfo.permitNo} /><p class="tip">Leave blank if not available.</p></div>
-              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.contactNo" class="input" bind:value={businessInfo.contactNo} /><p class="tip">Use digits only if possible.</p></div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={businessInfo.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">If provided, enter exactly 11 digits.</p></div>
               <div class="field-block"><label class="label">No. of Employees <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.employeesCount" class="input" type="number" min="0" bind:value={businessInfo.employeesCount} /></div>
               <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="business.operatingYears" class="input" type="number" min="0" bind:value={businessInfo.operatingYears} /></div>
             </div>
@@ -1006,7 +1022,7 @@
               <div class="field-block"><label class="label">Number of Rooms <span class="text-red-400">*</span></label><input data-field="boarding.roomsCount" class="input" type="number" min="1" bind:value={boardingInfo.roomsCount} /></div>
               <div class="field-block"><label class="label">Tenant Capacity <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.tenantCapacity" class="input" type="number" min="0" bind:value={boardingInfo.tenantCapacity} /></div>
               <div class="field-block"><label class="label">Current Tenants <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.currentTenants" class="input" type="number" min="0" bind:value={boardingInfo.currentTenants} /></div>
-              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.contactNo" class="input" bind:value={boardingInfo.contactNo} /></div>
+              <div class="field-block"><label class="label">Contact Number <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={boardingInfo.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">If provided, enter exactly 11 digits.</p></div>
               <div class="field-block"><label class="label">Years Operating <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="boarding.operatingYears" class="input" type="number" min="0" bind:value={boardingInfo.operatingYears} /></div>
             </div>
           {/if}
@@ -1184,13 +1200,13 @@
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
     <div class="grid md:grid-cols-2 gap-3">
       {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input" bind:value={(person as FamilyMember).relationship} /><p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
-      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input" bind:value={person.fullName} /><p class="tip">Enter complete name as used in IDs or barangay records.</p></div>
+      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input" bind:value={person.fullName} /><p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
       <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input" type="date" bind:value={person.birthdate} /><p class="tip">Used to compute age and senior citizen status.</p></div>
       <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input" bind:value={person.sex}><option value="">Select</option><option>Male</option><option>Female</option></select></div>
       <div class="field-block"><label class="label">Civil Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
       <div class="field-block"><label class="label">Occupation <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.occupation} /></div>
-      <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input" bind:value={person.contactNo} /><p class="tip">Optional. If provided, use 7 to 15 digits.</p></div>
-      <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input" type="email" bind:value={person.email} /></div>
+      <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input" inputmode="numeric" maxlength="11" bind:value={person.contactNo} placeholder="09XXXXXXXXX" /><p class="tip">Optional. If provided, enter exactly 11 digits.</p></div>
+      <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input" type="email" bind:value={person.email} placeholder="name@gmail.com" /><p class="tip">Optional. Gmail address only.</p></div>
       <div class="field-block"><label class="label">Vaccination Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.vaccinationStatus}><option value="">Select</option><option>Fully vaccinated</option><option>Partially vaccinated</option><option>Unvaccinated</option><option>Unknown</option></select><p class="tip">Optional health information for barangay planning.</p></div>
       <div class="field-block"><label class="label">Blood Type <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.bloodType}><option value="">Select</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option><option>Unknown</option></select></div>
       <div class="field-block md:col-span-2"><label class="label">Medical Notes <span class="text-slate-300 normal-case">(optional)</span></label><input class="input" bind:value={person.medicalNotes} placeholder="e.g. allergies, maintenance medicine, leave blank if none" /><p class="tip">Optional. Add only details you want barangay staff to know for assistance.</p></div>
