@@ -8,6 +8,7 @@
   const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
   const DEMO_BYPASS = urlParams.get('demo') === 'true';
   const TOTAL_STEPS = 6;
+  const todayDate = new Date().toISOString().slice(0, 10);
 
   $: qrId = $page.params.qrId;
 
@@ -25,8 +26,10 @@
   interface PersonProfile {
     fullName: string;
     birthdate: string;
+    placeOfBirth: string;
     sex: string;
     civilStatus: string;
+    citizenship: string;
     occupation: string;
     contactNo: string;
     email: string;
@@ -140,8 +143,10 @@
     return {
       fullName: '',
       birthdate: '',
+      placeOfBirth: '',
       sex: '',
       civilStatus: '',
+      citizenship: 'Filipino',
       occupation: '',
       contactNo: '',
       email: '',
@@ -175,15 +180,15 @@
 
   function markInvalid(field: string, message: string) {
     invalidField = field;
-    setFieldError(field, message, message);
+    setFieldError(field, message);
     return message;
   }
 
-  function setFieldError(field: string, message: string, topMessage = message) {
+  function setFieldError(field: string, message: string) {
     if (message) {
       fieldErrors = { ...fieldErrors, [field]: message };
       invalidField = field;
-      errorMsg = topMessage;
+      errorMsg = '';
       return;
     }
     if (!(field in fieldErrors)) return;
@@ -270,7 +275,9 @@
     const relationship = 'relationship' in person && valueOverride !== undefined ? value : 'relationship' in person ? person.relationship : '';
     const fullName = key === 'fullName' && valueOverride !== undefined ? value : person.fullName;
     const birthdate = key === 'birthdate' && valueOverride !== undefined ? value : person.birthdate;
+    const placeOfBirth = key === 'placeOfBirth' && valueOverride !== undefined ? value : person.placeOfBirth;
     const sex = key === 'sex' && valueOverride !== undefined ? value : person.sex;
+    const citizenship = key === 'citizenship' && valueOverride !== undefined ? value : person.citizenship;
     const occupation = key === 'occupation' && valueOverride !== undefined ? value : person.occupation;
     const contactNo = key === 'contactNo' && valueOverride !== undefined ? value : person.contactNo;
     const email = key === 'email' && valueOverride !== undefined ? value : person.email;
@@ -285,9 +292,12 @@
     }
     if (key === 'birthdate' && (force || birthdate)) {
       if (!birthdate) message = 'Birthdate is required.';
+      else if (birthdate > todayDate) message = 'Future dates are not allowed.';
       else if (!isValidBirthdate(birthdate)) message = 'Enter a valid birthdate.';
     }
+    if (key === 'placeOfBirth' && (force || placeOfBirth.trim()) && !placeOfBirth.trim()) message = 'Place of birth is required.';
     if (key === 'sex' && (force || sex) && !sex) message = 'Sex is required.';
+    if (key === 'citizenship' && (force || citizenship.trim()) && !citizenship.trim()) message = 'Citizenship is required.';
     if (key === 'occupation' && (force || occupation.trim()) && !occupation.trim()) {
       message = 'Occupation is required. Enter N/A if none.';
     }
@@ -301,7 +311,7 @@
       message = 'PWD type is required.';
     }
 
-    setFieldError(field, message, message ? `${label}: ${message.charAt(0).toLowerCase()}${message.slice(1)}` : '');
+    setFieldError(field, message);
   }
 
   function seniorStatusText(person: PersonProfile) {
@@ -629,7 +639,9 @@
     if (!isValidPersonName(person.fullName)) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name must use letters only, not numbers.`);
     if (!person.birthdate) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: birthdate is required.`);
     if (!isValidBirthdate(person.birthdate)) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: enter a valid birthdate.`);
+    if (!person.placeOfBirth.trim()) return markInvalid(`${fieldPrefix}.placeOfBirth`, `${label}: place of birth is required.`);
     if (!person.sex) return markInvalid(`${fieldPrefix}.sex`, `${label}: sex is required.`);
+    if (!person.citizenship.trim()) return markInvalid(`${fieldPrefix}.citizenship`, `${label}: citizenship is required.`);
     if (!person.occupation.trim()) return markInvalid(`${fieldPrefix}.occupation`, `${label}: occupation is required. Enter N/A if none.`);
     if (!isValidContactNo(person.contactNo)) return markInvalid(`${fieldPrefix}.contactNo`, `${label}: contact number must be exactly 11 digits.`);
     if (!isValidEmail(person.email)) return markInvalid(`${fieldPrefix}.email`, `${label}: email must be a valid Gmail address, like name@gmail.com.`);
@@ -733,8 +745,10 @@
       fullName: person.fullName.trim(),
       birthdate: person.birthdate,
       age: calculateAge(person.birthdate),
+      placeOfBirth: person.placeOfBirth.trim(),
       sex: person.sex,
       civilStatus: person.civilStatus,
+      citizenship: person.citizenship.trim(),
       occupation: person.occupation.trim(),
       contactNo: person.contactNo.trim(),
       email: person.email.trim().toLowerCase(),
@@ -841,9 +855,11 @@
         name: primaryName,
         email: primary.email.trim().toLowerCase(),
         birthdate: primary.birthdate,
+        placeOfBirth: primary.placeOfBirth.trim(),
         age: calculateAge(primary.birthdate) ?? 0,
         sex: primary.sex,
         civilStatus: primary.civilStatus,
+        citizenship: primary.citizenship.trim(),
         occupation: primary.occupation.trim(),
         contactNo: primary.contactNo.trim(),
         isPWD: primary.isPWD || members.some((member) => member.isPWD),
@@ -1291,9 +1307,11 @@
     <div class="grid md:grid-cols-2 gap-3">
       {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input {fieldInvalid(`${fieldPrefix}.relationship`) ? 'input-error' : ''}" bind:value={(person as FamilyMember).relationship} on:input={(event) => validatePersonField(person, fieldPrefix, 'relationship', false, event.currentTarget.value)} on:blur={(event) => validatePersonField(person, fieldPrefix, 'relationship', true, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.relationship`)}<p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
       <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input {fieldInvalid(`${fieldPrefix}.fullName`) ? 'input-error' : ''}" bind:value={person.fullName} on:input={(event) => validatePersonField(person, fieldPrefix, 'fullName', false, event.currentTarget.value)} on:blur={(event) => validatePersonField(person, fieldPrefix, 'fullName', true, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.fullName`)}<p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
-      <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" bind:value={person.birthdate} on:change={(event) => validatePersonField(person, fieldPrefix, 'birthdate', true, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Used to compute age and senior citizen status.</p></div>
+      <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" max={todayDate} bind:value={person.birthdate} on:change={(event) => validatePersonField(person, fieldPrefix, 'birthdate', true, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Future dates are disabled. Used to compute age and senior citizen status.</p></div>
+      <div class="field-block"><label class="label">Place of Birth <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.placeOfBirth" class="input {fieldInvalid(`${fieldPrefix}.placeOfBirth`) ? 'input-error' : ''}" bind:value={person.placeOfBirth} on:input={(event) => validatePersonField(person, fieldPrefix, 'placeOfBirth', false, event.currentTarget.value)} on:blur={(event) => validatePersonField(person, fieldPrefix, 'placeOfBirth', true, event.currentTarget.value)} placeholder="City / Municipality / Province" />{@render FieldError(`${fieldPrefix}.placeOfBirth`)}<p class="tip">Required by the RBI individual record.</p></div>
       <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input {fieldInvalid(`${fieldPrefix}.sex`) ? 'input-error' : ''}" bind:value={person.sex} on:change={(event) => validatePersonField(person, fieldPrefix, 'sex', true, event.currentTarget.value)}><option value="">Select</option><option>Male</option><option>Female</option></select>{@render FieldError(`${fieldPrefix}.sex`)}</div>
       <div class="field-block"><label class="label">Civil Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
+      <div class="field-block"><label class="label">Citizenship <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.citizenship" class="input {fieldInvalid(`${fieldPrefix}.citizenship`) ? 'input-error' : ''}" bind:value={person.citizenship} on:input={(event) => validatePersonField(person, fieldPrefix, 'citizenship', false, event.currentTarget.value)} on:blur={(event) => validatePersonField(person, fieldPrefix, 'citizenship', true, event.currentTarget.value)} placeholder="e.g. Filipino" />{@render FieldError(`${fieldPrefix}.citizenship`)}<p class="tip">Required by the RBI individual record.</p></div>
       <div class="field-block"><label class="label">Occupation <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.occupation" class="input {fieldInvalid(`${fieldPrefix}.occupation`) ? 'input-error' : ''}" bind:value={person.occupation} on:input={(event) => validatePersonField(person, fieldPrefix, 'occupation', false, event.currentTarget.value)} on:blur={(event) => validatePersonField(person, fieldPrefix, 'occupation', true, event.currentTarget.value)} placeholder="e.g. Teacher, Vendor, N/A" />{@render FieldError(`${fieldPrefix}.occupation`)}<p class="tip">Required. If no occupation, enter N/A.</p></div>
       <div class="field-block"><label class="label">Contact No. <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.contactNo" class="input {fieldInvalid(`${fieldPrefix}.contactNo`) ? 'input-error' : ''}" inputmode="numeric" maxlength="11" bind:value={person.contactNo} placeholder="09XXXXXXXXX" on:input={(event) => validatePersonField(person, fieldPrefix, 'contactNo', false, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.contactNo`)}<p class="tip">Optional. If provided, enter exactly 11 digits.</p></div>
       <div class="field-block"><label class="label">Email <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.email" class="input {fieldInvalid(`${fieldPrefix}.email`) ? 'input-error' : ''}" type="email" bind:value={person.email} placeholder="name@gmail.com" on:input={(event) => validatePersonField(person, fieldPrefix, 'email', false, event.currentTarget.value)} />{@render FieldError(`${fieldPrefix}.email`)}<p class="tip">Optional. Gmail address only.</p></div>
@@ -1336,8 +1354,10 @@
         {@render ReviewItem('Relationship', person.relationship || '-')}
       {/if}
       {@render ReviewItem('Birthdate / Age', person.birthdate ? `${person.birthdate} / ${calculateAge(person.birthdate) ?? '-'} yrs` : '-')}
+      {@render ReviewItem('Place of Birth', person.placeOfBirth || '-')}
       {@render ReviewItem('Sex', person.sex || '-')}
       {@render ReviewItem('Civil Status', person.civilStatus || '-')}
+      {@render ReviewItem('Citizenship', person.citizenship || '-')}
       {@render ReviewItem('Occupation', person.occupation || '-')}
       {@render ReviewItem('Contact No.', person.contactNo || '-')}
       {@render ReviewItem('Email', person.email || '-')}
