@@ -19,20 +19,11 @@
   const dispatch = createEventDispatcher();
   
   let sending = false;
-  let emailData = {
-    to: '',
-    subject: 'Your Resident Registration has been Declined',
-    reason: '',
-    includeQR: true
-  };
+  let emailData = { reason: '', includeQR: true };
   
   let qrCodeUrl: string | null = null;
   let loadedQrHouseholdId = '';
   
-  $: if (resident?.email) {
-    emailData.to = resident.email;
-  }
-
   $: if (emailData.includeQR && householdId && loadedQrHouseholdId !== householdId) {
     loadedQrHouseholdId = householdId;
     fetchQRCode();
@@ -75,29 +66,25 @@
     sending = true;
     
     try {
-      // Fetch QR code if needed
-      let qrImage = null;
-      if (emailData.includeQR) {
-        qrImage = await fetchQRCode();
-      }
-      
-      // Call your API endpoint to send email
+      const { auth } = await import('$lib/firebase');
+      const user = auth.currentUser;
+      if (!user) throw new Error('Your session has expired. Please sign in again.');
+
+      const token = await user.getIdToken();
       const response = await fetch('/api/send-decline-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          to: emailData.to,
-          subject: emailData.subject,
+          residentId: resident?.id,
           reason: emailData.reason,
-          residentName: resident?.name || `${resident?.firstName} ${resident?.lastName}`,
-          qrCodeUrl: qrImage,
-          qrId: resident?.qrId,
-          householdId: householdId,
           includeQR: emailData.includeQR
         })
       });
       
-      if (!response.ok) throw new Error('Failed to send email');
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || data?.error || 'Failed to send email');
+      }
       
       dispatch('emailSent', { success: true });
       
@@ -168,22 +155,23 @@
       </header>
 
       <div class="grid gap-4 overflow-y-auto p-4 sm:p-6 lg:grid-cols-2">
-        <label class="block">
+        <div class="block">
           <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
-            Recipient Email <span class="text-red-400">*</span>
+            Recipient Email
           </span>
-          <input type="email" bind:value={emailData.to}
-            class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-red-400"
-            placeholder="resident@example.com" />
-        </label>
+          <p class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            {resident?.email || 'No email address on this resident record'}
+          </p>
+        </div>
 
-        <label class="block">
+        <div class="block">
           <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
-            Subject <span class="text-red-400">*</span>
+            Subject
           </span>
-          <input type="text" bind:value={emailData.subject}
-            class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-red-400" />
-        </label>
+          <p class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Your Resident Registration has been Declined
+          </p>
+        </div>
 
         <label class="block lg:col-span-2">
           <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
