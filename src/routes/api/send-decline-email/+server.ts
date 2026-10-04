@@ -22,10 +22,21 @@ function escapeHtml(value: string) {
   });
 }
 
+function normalizePrivateKey(value: string | undefined) {
+  if (!value) return '';
+
+  let key = value.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+
+  return key.replace(/\\n/g, '\n');
+}
+
 function getFirebaseAdmin() {
   const projectId = env.FIREBASE_ADMIN_PROJECT_ID;
   const clientEmail = env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = normalizePrivateKey(env.FIREBASE_ADMIN_PRIVATE_KEY);
 
   if (!projectId || !clientEmail || !privateKey) {
     throw error(503, 'Email service is not configured.');
