@@ -1,6 +1,12 @@
 // @ts-nocheck
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+// Vite emits this file as a fingerprinted public asset. Without an explicit
+// URL, MapLibre's worker can be omitted from a Vercel deployment and the map
+// fails before it renders.
+maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 const FALLBACK_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 
@@ -40,6 +46,7 @@ export function createMapAdapter(mapTilerKey) {
             ]
           : undefined
       });
+      let switchedToFallback = false;
 
       const wrapper = {
         raw: map,
@@ -65,7 +72,17 @@ export function createMapAdapter(mapTilerKey) {
         ready = true;
         queued.splice(0).forEach((action) => action());
       });
-      map.on('error', (event) => console.error('Map service error:', event.error));
+      map.on('error', (event) => {
+        console.error('Map service error:', event.error);
+        // A bad/restricted MapTiler key must not make household locations
+        // inaccessible. Before the first successful load, change to the
+        // bundled fallback style and let the queued boundary/markers render.
+        if (!ready && mapTilerKey && !switchedToFallback) {
+          switchedToFallback = true;
+          console.warn('MapTiler could not load; using the fallback basemap.');
+          map.setStyle(FALLBACK_STYLE);
+        }
+      });
       return wrapper;
     },
 
