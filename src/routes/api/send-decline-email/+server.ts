@@ -160,9 +160,31 @@ export const POST: RequestHandler = async ({ request }) => {
     });
 
     return json({ success: true, messageId: info.messageId });
-  } catch (error) {
-    if (error && typeof error === 'object' && 'status' in error) throw error;
-    console.error('Email error:', error);
-    return json({ error: 'Failed to send email' }, { status: 500 });
+  } catch (caught) {
+    if (caught && typeof caught === 'object' && 'status' in caught) throw caught;
+
+    const code =
+      caught && typeof caught === 'object' && 'code' in caught && typeof caught.code === 'string'
+        ? caught.code
+        : 'unknown';
+    console.error('Email error:', { code, message: caught instanceof Error ? caught.message : 'Unknown error' });
+
+    if (code === 'app/invalid-credential') {
+      return json(
+        { error: 'Firebase Admin private key is invalid. Check its Vercel formatting.', code },
+        { status: 503 }
+      );
+    }
+    if (code === 'EAUTH') {
+      return json(
+        { error: 'Gmail authentication failed. Replace EMAIL_PASS with a current Gmail App Password.', code },
+        { status: 502 }
+      );
+    }
+    if (code === 'ENOTFOUND' || code === 'ECONNECTION' || code === 'ETIMEDOUT') {
+      return json({ error: 'Email provider could not be reached. Please try again shortly.', code }, { status: 502 });
+    }
+
+    return json({ error: 'Email service failed. Check the Vercel function log.', code }, { status: 500 });
   }
 };
