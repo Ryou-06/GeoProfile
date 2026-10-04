@@ -10,6 +10,8 @@
   let mapContainer;
   /** @type {any} */
   let leafletMap = null;
+  /** @type {any} */
+  let L = null;
   /** @type {any[]} */
   let markers = [];
 
@@ -84,19 +86,8 @@
   $: residentsWithoutGPS = allResidents.filter(r => !r.lat || !r.lng).length;
 
   onMount(async () => {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    document.head.appendChild(link);
-
-    await new Promise(/** @param {(value: void) => void} resolve */ (resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.onload = () => resolve();
-      document.head.appendChild(script);
-    });
-
-    const L = /** @type {any} */ (window).L;
+    const { createMapAdapter } = await import('$lib/maps/maplibreLeafletAdapter');
+    L = createMapAdapter(import.meta.env.VITE_MAPTILER_KEY);
 const pagAsaCenter = [14.8279, 120.2884]; // updated center of traced boundary
 
 const pagAsaBounds = L.latLngBounds(
@@ -595,7 +586,7 @@ L.geoJSON(pagAsaBoundary, {
 }).addTo(leafletMap);
 
 
-    L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
+    leafletMap.addControl(L.control.zoom(), 'bottom-right');
     resizeMap = () => leafletMap?.invalidateSize();
     window.addEventListener('resize', resizeMap);
     setTimeout(resizeMap, 0);
@@ -678,7 +669,6 @@ L.geoJSON(pagAsaBoundary, {
 
   /** @param {string} houseNo @param {boolean} isSelected @param {number} count */
   function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0) {
-    const L = /** @type {any} */ (window).L;
     const label = houseNo?.trim().slice(0, 6) || '?';
     const size = isSelected ? 52 : 44;
     const pinColor = isSelected ? '#1d4ed8' : '#2563eb';
@@ -712,7 +702,6 @@ L.geoJSON(pagAsaBoundary, {
 
   /** @param {any[]} list */
   function updateMarkers(list) {
-    const L = /** @type {any} */ (window).L;
     markers.forEach(m => m.remove());
     markers = [];
 
@@ -766,6 +755,12 @@ L.geoJSON(pagAsaBoundary, {
 
 <svelte:head>
   <style>
+    :global(.geoprofile-map-marker) {
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      padding: 0;
+    }
     .map-label {
       background: white !important; border: 1px solid #e2e8f0 !important;
       border-radius: 6px !important; padding: 2px 7px !important;
