@@ -9,8 +9,6 @@
   let mapContainer;
   /** @type {any} */
   let leafletMap = null;
-  /** @type {any} */
-  let L = null;
   /** @type {any[]} */
   let markers = [];
 
@@ -100,8 +98,19 @@
   }, /** @type {Record<string, number>} */ ({}));
 
   onMount(async () => {
-    const { createMapAdapter } = await import('$lib/maps/maplibreLeafletAdapter');
-    L = createMapAdapter(import.meta.env.VITE_MAPTILER_KEY);
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+
+    await new Promise(/** @param {(value: void) => void} resolve */ (resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.onload = () => resolve();
+      document.head.appendChild(script);
+    });
+
+    const L = /** @type {any} */ (window).L;
     const pagAsaCenter = [14.8279, 120.2884];
 
     const pagAsaBounds = L.latLngBounds(
@@ -119,9 +128,9 @@
       maxBoundsViscosity: 1.0,
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap contributors © CARTO',
-      subdomains: 'abcd', maxZoom: 20,
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 20,
     }).addTo(leafletMap);
 
     // Accurate Pag-Asa boundary — hand-traced from geojson.io
@@ -598,7 +607,7 @@
       }
     }).addTo(leafletMap);
 
-    leafletMap.addControl(L.control.zoom(), 'bottom-right');
+    L.control.zoom({ position: 'bottomright' }).addTo(leafletMap);
     resizeMap = () => leafletMap?.invalidateSize();
     window.addEventListener('resize', resizeMap);
     setTimeout(resizeMap, 0);
@@ -671,6 +680,7 @@
 
   /** @param {string} houseNo @param {boolean} isSelected @param {number} count @param {string} markerColor */
   function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0, markerColor = '#2563eb') {
+    const L        = /** @type {any} */ (window).L;
     const label    = (houseNo ?? '').trim().slice(0, 6) || '?';
     const size     = isSelected ? 52 : 44;
     const pinColor = isSelected ? '#1d4ed8' : markerColor;
@@ -705,6 +715,7 @@
 
   /** @param {any[]} list */
   function updateMarkers(list) {
+    const L = /** @type {any} */ (window).L;
     markers.forEach(m => m.remove());
     markers = [];
 
@@ -752,12 +763,6 @@
 
 <svelte:head>
   <style>
-    :global(.geoprofile-map-marker) {
-      background: transparent;
-      border: 0;
-      cursor: pointer;
-      padding: 0;
-    }
     .map-label {
       background: white !important; border: 1px solid #e2e8f0 !important;
       border-radius: 6px !important; padding: 2px 7px !important;
