@@ -1064,7 +1064,8 @@
       </div>
     </div>
   {:else}
-    <div class="px-4 py-5 max-w-3xl mx-auto space-y-5">
+    <div class="registration-shell">
+      <main class="registration-main space-y-5">
       <div class="flex items-center gap-3 bg-white rounded-2xl border border-slate-200 px-4 py-3 shadow-sm">
         <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white font-bold" style="background:#0f2060;">QR</div>
         <div class="min-w-0">
@@ -1334,7 +1335,7 @@
         </section>
       {/if}
 
-      <div class="flex gap-3 pb-8">
+      <div class="form-actions flex gap-3 pb-8">
         {#if step > 1}<button type="button" on:click={prevStep} disabled={loading} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-slate-600 bg-white border-2 border-slate-200">Back</button>{/if}
         {#if step < TOTAL_STEPS}
           <button type="button" on:click={nextStep} disabled={loading || !canRegister || (step === 1 && !DEMO_BYPASS && gpsLat === null)} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-50" style="background:#0f2060;">Next</button>
@@ -1342,6 +1343,56 @@
           <button type="button" on:click={handleSubmit} disabled={loading || !canRegister} class="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white shadow-lg disabled:opacity-60" style="background:#059669;">{loading ? 'Submitting...' : 'Submit Profile'}</button>
         {/if}
       </div>
+      </main>
+
+      <aside class="registration-sidebar" aria-label="Registration summary">
+        <div class="sidebar-card">
+          <p class="sidebar-eyebrow">Registration progress</p>
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="font-nunito text-lg font-extrabold text-slate-800">Step {step} of {TOTAL_STEPS}</p>
+              <p class="text-xs font-semibold text-slate-500">{stepLabels[step - 1]}</p>
+            </div>
+            <div class="progress-ring">{Math.round((step / TOTAL_STEPS) * 100)}%</div>
+          </div>
+          <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div class="h-full rounded-full bg-blue-600 transition-all" style={`width: ${(step / TOTAL_STEPS) * 100}%`}></div>
+          </div>
+          <ol class="sidebar-steps">
+            {#each stepLabels as label, index (label)}
+              <li class:sidebar-step-current={step === index + 1} class:sidebar-step-done={step > index + 1}>
+                <span>{step > index + 1 ? '✓' : index + 1}</span>{label}
+              </li>
+            {/each}
+          </ol>
+        </div>
+
+        <div class="sidebar-card space-y-3">
+          <div>
+            <p class="sidebar-eyebrow">Current session</p>
+            <p class="mt-1 truncate text-sm font-extrabold text-slate-700">{houseNo || household?.houseNo || 'Household'} {street || household?.street}</p>
+            <p class="mt-0.5 text-xs text-slate-500">QR ID: {qrId}</p>
+          </div>
+          <div class="rounded-xl border border-blue-100 bg-blue-50 p-3">
+            <p class="text-[0.65rem] font-extrabold uppercase tracking-wider text-blue-500">Address</p>
+            <p class="mt-1 text-xs font-semibold leading-relaxed text-blue-800">{fullAddress || 'Select a house number and street.'}</p>
+          </div>
+          <div class="rounded-xl border p-3 {canRegister ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}">
+            <p class="text-[0.65rem] font-extrabold uppercase tracking-wider {canRegister ? 'text-emerald-600' : 'text-amber-600'}">GPS status</p>
+            <p class="mt-1 text-xs font-semibold leading-relaxed {canRegister ? 'text-emerald-800' : 'text-amber-800'}">{gpsMessage}</p>
+          </div>
+        </div>
+
+        <div class="sidebar-card">
+          <p class="sidebar-eyebrow">Before you submit</p>
+          <ul class="sidebar-checklist">
+            <li class:check-done={Boolean(householdType)}><span>{householdType ? '✓' : '○'}</span> Choose a profile type</li>
+            <li class:check-done={Boolean(houseNo && street)}><span>{houseNo && street ? '✓' : '○'}</span> Confirm the address</li>
+            <li class:check-done={Boolean(gpsLat && gpsLng)}><span>{gpsLat && gpsLng ? '✓' : '○'}</span> Capture GPS location</li>
+            <li class:check-done={Boolean(housePhotoPreview)}><span>{housePhotoPreview ? '✓' : '○'}</span> Add a front photo</li>
+          </ul>
+        </div>
+      </aside>
     </div>
   {/if}
 </div>
@@ -1355,7 +1406,7 @@
 {#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false, fieldPrefix = title)}
   <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
-    <div class="grid md:grid-cols-2 gap-3">
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
       {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input {fieldInvalid(`${fieldPrefix}.relationship`) ? 'input-error' : ''}" bind:value={(person as FamilyMember).relationship} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'relationship')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'relationship', true)} />{@render FieldError(`${fieldPrefix}.relationship`)}<p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
       <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input {fieldInvalid(`${fieldPrefix}.fullName`) ? 'input-error' : ''}" bind:value={person.fullName} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'fullName')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'fullName', true)} />{@render FieldError(`${fieldPrefix}.fullName`)}<p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
       <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" max={minimumAgeDate} bind:value={person.birthdate} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'birthdate', true)} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Resident must be at least 1 month old.</p></div>
@@ -1422,6 +1473,25 @@
 {/snippet}
 
 <style>
+  .registration-shell { width:min(100% - 2rem, 90rem); margin:0 auto; padding:1.5rem 0 2rem; }
+  .registration-main { min-width:0; }
+  .registration-sidebar { display:none; }
+  .form-actions { background:rgba(248,250,252,.94); }
+  .sidebar-card { border:1px solid #e2e8f0; background:white; border-radius:1rem; box-shadow:0 1px 2px rgba(15,23,42,.05); padding:1rem; }
+  .sidebar-eyebrow { color:#64748b; font-size:.65rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+  .progress-ring { display:flex; align-items:center; justify-content:center; width:3rem; height:3rem; flex:none; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:.7rem; font-weight:900; }
+  .sidebar-steps { display:grid; gap:.45rem; margin-top:1rem; }
+  .sidebar-steps li { display:flex; align-items:center; gap:.6rem; color:#94a3b8; font-size:.75rem; font-weight:700; }
+  .sidebar-steps li span { display:flex; align-items:center; justify-content:center; width:1.25rem; height:1.25rem; border-radius:999px; background:#f1f5f9; color:#94a3b8; font-size:.65rem; font-weight:900; }
+  .sidebar-steps .sidebar-step-current { color:#1e3a8a; }
+  .sidebar-steps .sidebar-step-current span { background:#1d4ed8; color:white; }
+  .sidebar-steps .sidebar-step-done { color:#047857; }
+  .sidebar-steps .sidebar-step-done span { background:#d1fae5; color:#047857; }
+  .sidebar-checklist { display:grid; gap:.65rem; margin-top:.8rem; }
+  .sidebar-checklist li { display:flex; gap:.55rem; align-items:flex-start; color:#64748b; font-size:.75rem; font-weight:700; line-height:1.35; }
+  .sidebar-checklist li span { color:#94a3b8; font-weight:900; }
+  .sidebar-checklist .check-done { color:#047857; }
+  .sidebar-checklist .check-done span { color:#059669; }
   .panel { background:white; border:1px solid #e2e8f0; border-radius:1rem; box-shadow:0 1px 2px rgba(15,23,42,.05); padding:1.25rem; display:flex; flex-direction:column; gap:1rem; }
   .eyebrow { font-size:.65rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:#2563eb; }
   .title { font-family:Nunito,sans-serif; font-weight:900; color:#334155; font-size:1.15rem; }
@@ -1458,4 +1528,9 @@
     .choice { border-radius:.75rem; }
   }
   @media (min-width:768px) { .review-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (min-width:1024px) {
+    .registration-shell { display:grid; grid-template-columns:minmax(0,1fr) 18rem; gap:1.5rem; align-items:start; }
+    .registration-sidebar { display:grid; gap:1rem; position:sticky; top:5.5rem; }
+    .form-actions { position:sticky; bottom:0; z-index:10; padding:1rem 0; margin-bottom:-.5rem; }
+  }
 </style>
