@@ -153,8 +153,40 @@
       }, 2000);
     } catch (e) {
       const code = (e as { code?: string })?.code ?? '';
-      switch (code) {
-        case 'auth/email-already-in-use': errorMsg = 'This username is already registered.'; break;
+      if (code === 'auth/email-already-in-use') {
+        // A Firebase Auth account can remain after its Firestore records have been deleted.
+        // If the person knows its password, restore those records so the account is usable again.
+        try {
+          const { auth, db } = await import('$lib/firebase');
+          const { signInWithEmailAndPassword, updateProfile } = await import('firebase/auth');
+          const { doc, setDoc, serverTimestamp } = await import('firebase/firestore');
+          const email = `${username.toLowerCase().trim()}@admin.geoprofile.local`;
+          const credential = await signInWithEmailAndPassword(auth, email, password);
+
+          await updateProfile(credential.user, { displayName: name.trim() });
+          await setDoc(doc(db, 'users', credential.user.uid), {
+            username: username.toLowerCase().trim(),
+            name: name.trim(),
+            email,
+            position,
+            role: 'admin',
+            restoredAt: serverTimestamp()
+          }, { merge: true });
+          await setDoc(doc(db, 'usernames', username.toLowerCase().trim()), {
+            email,
+            uid: credential.user.uid
+          });
+
+          success = true;
+          setTimeout(() => { window.location.href = '/admin/dashboard'; }, 2000);
+          return;
+        } catch (restoreError) {
+          const restoreCode = (restoreError as { code?: string })?.code ?? '';
+          errorMsg = restoreCode === 'auth/wrong-password' || restoreCode === 'auth/invalid-credential'
+            ? 'This username still exists in Firebase Authentication. Use its original password, or delete that user in Firebase Authentication before registering again.'
+            : 'This username is still registered in Firebase Authentication. Delete the matching user there, then try again.';
+        }
+      } else switch (code) {
         case 'auth/invalid-email':        errorMsg = 'Invalid username format.'; break;
         case 'auth/weak-password':        errorMsg = 'Password is too weak. Use at least 8 characters.'; break;
         default:                          errorMsg = 'Something went wrong. Please try again.';

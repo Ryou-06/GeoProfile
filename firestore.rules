@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function ownsHousehold(householdId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow get: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Login and username availability checks happen before a user is signed in.
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /households/{householdId} {
+      // Public registration needs to resolve a QR household.
+      allow read: if isAdmin() || (signedIn() && resource.data.createdBy == request.auth.uid) || resource.data.status == 'active';
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin() || (signedIn() && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /residents/{residentId} {
+      // Residents submit a profile through a public QR-registration form.
+      allow create: if true;
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.encodedBy == request.auth.uid)
+        || ownsHousehold(resource.data.householdId);
+      allow update, delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow create: if signedIn();
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -29,7 +29,6 @@
   let loading = true;
   /** @type {string | null} */
   let loadError = null;
-  let showDebug = false;
   // Demo mode only changes this map's view restrictions; the saved boundary remains unchanged.
   let demoMode = false;
   /** @type {any} */
@@ -50,10 +49,30 @@
     'Single Parent': { markerColor: '#8b5cf6', avatarBg: '#8b5cf6', badgeClass: 'bg-violet-100 text-violet-700' },
   };
 
+  /** @param {any} resident */
+  function isSeniorCitizen(resident) {
+    if (resident.isSenior) return true;
+
+    const storedAge = Number(resident.age);
+    if (Number.isFinite(storedAge) && storedAge >= 60) return true;
+
+    if (!resident.birthdate) return false;
+    const birthdate = new Date(resident.birthdate);
+    if (Number.isNaN(birthdate.getTime())) return false;
+
+    const today = new Date();
+    let age = today.getFullYear() - birthdate.getFullYear();
+    const birthdayHasNotOccurred =
+      today.getMonth() < birthdate.getMonth() ||
+      (today.getMonth() === birthdate.getMonth() && today.getDate() < birthdate.getDate());
+    if (birthdayHasNotOccurred) age--;
+    return age >= 60;
+  }
+
   /** @param {any} r */
   function getCategory(r) {
     if (r.isPWD) return 'PWD';
-    if (r.isSenior) return 'Senior';
+    if (isSeniorCitizen(r)) return 'Senior';
     if (r.isSingleParent) return 'Single Parent';
     return 'Regular';
   }
@@ -63,12 +82,38 @@
     return (name ?? '??').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
   }
 
-  /** @param {any[]} residents */
+  /**
+   * Select one sector color for a household with multiple sector members.
+   * Priority: PWD, then Senior, then Single Parent.
+   * @param {any[]} residents
+   */
   function getHouseholdMarkerColor(residents) {
     if (residents.some(r => r.isPWD)) return categoryConfig['PWD'].markerColor;
-    if (residents.some(r => r.isSenior)) return categoryConfig['Senior'].markerColor;
+    if (residents.some(isSeniorCitizen)) return categoryConfig['Senior'].markerColor;
     if (residents.some(r => r.isSingleParent)) return categoryConfig['Single Parent'].markerColor;
     return categoryConfig['Regular'].markerColor;
+  }
+
+  /** Expand one QR registration into the people recorded inside that household. */
+  /** @param {any} profile */
+  function getHouseholdMembers(profile) {
+    /** @param {any} person @param {string} key */
+    const member = (person, key) => ({
+      ...person,
+      isSenior: isSeniorCitizen(person),
+      id: person.id || `${profile.id}-${key}`,
+      name: person.name || person.fullName || 'Unnamed household member',
+      category: getCategory(person),
+      status: profile.status,
+      profileRecord: profile,
+    });
+    const embeddedMembers = [
+      ...(profile.parents?.father ? [member(profile.parents.father, 'father')] : []),
+      ...(profile.parents?.mother ? [member(profile.parents.mother, 'mother')] : []),
+      ...(profile.familyMembers ?? []).map(/** @param {any} person @param {number} index */ (person, index) => member(person, `family-${index}`)),
+      ...(profile.occupantRecords ?? []).map(/** @param {any} person @param {number} index */ (person, index) => member(person, `occupant-${index}`)),
+    ];
+    return embeddedMembers.length ? embeddedMembers : [member(profile, 'head')];
   }
 
   // ── Filtered households by street ─────────────────────
@@ -81,11 +126,10 @@
     const matchStreet = filterStreet === 'All Streets' || h.street === filterStreet;
     return matchSearch && matchStreet;
   });
+  $: totalHouseholdMembers = households.reduce((total, household) => total + household.residents.length, 0);
 
   $: if (leafletMap) updateMarkers(filteredHouseholds);
 
-  $: residentsWithGPS = allResidents.filter(r => r.lat && r.lng).length;
-  $: residentsWithoutGPS = allResidents.filter(r => !r.lat || !r.lng).length;
 
   function toggleDemoMode() {
     demoMode = !demoMode;
@@ -686,7 +730,7 @@ L.geoJSON(pagAsaBoundary, {
         if (household && !household.lng && lng) household.lng = lng;
       }
 
-      householdMap.get(householdId)?.residents.push(resident);
+      householdMap.get(householdId)?.residents.push(...getHouseholdMembers(resident));
     });
 
     const allHouseholds = Array.from(householdMap.values());
@@ -697,12 +741,12 @@ L.geoJSON(pagAsaBoundary, {
     console.log('❌ Households without GPS:', allHouseholds.filter(h => !h.lat || !h.lng).length);
   }
 
-  /** @param {string} houseNo @param {boolean} isSelected @param {number} count */
-  function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0) {
+  /** @param {string} houseNo @param {boolean} isSelected @param {number} count @param {string} markerColor */
+  function createHouseholdMarkerIcon(houseNo, isSelected = false, count = 0, markerColor = '#2563eb') {
     const L = /** @type {any} */ (window).L;
     const label = houseNo?.trim().slice(0, 6) || '?';
     const size = isSelected ? 52 : 44;
-    const pinColor = isSelected ? '#1d4ed8' : '#2563eb';
+    const pinColor = isSelected ? '#1d4ed8' : markerColor;
     const textSize = label.length <= 3 ? 10 : label.length <= 5 ? 8 : 7;
 
     const svg = `
@@ -740,7 +784,8 @@ L.geoJSON(pagAsaBoundary, {
     list.forEach(h => {
       if (!h.lat || !h.lng) return;
       const isSelected = selectedHousehold?.id === h.id;
-      const icon = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.length);
+      const markerColor = getHouseholdMarkerColor(h.residents);
+      const icon = createHouseholdMarkerIcon(h.houseNo, isSelected, h.residents.length, markerColor);
 
       try {
         const marker = L.marker([h.lat, h.lng], { icon })
@@ -767,7 +812,7 @@ L.geoJSON(pagAsaBoundary, {
   }
 
   /** @param {any} r */
-  function openProfile(r) { profileResident = r; }
+  function openProfile(r) { profileResident = r.profileRecord ?? r; }
 
   /** @param {{ detail: { id: string, status: string } }} e */
   function handleStatusChange(e) {
@@ -820,13 +865,6 @@ L.geoJSON(pagAsaBoundary, {
           <span class="w-2 h-2 rounded-full {demoMode ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}"></span>
           {demoMode ? 'Demo map: On' : 'Demo map'}
         </button>
-        <button on:click={() => showDebug = !showDebug}
-          class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors {showDebug ? 'bg-blue-100 text-blue-700' : 'text-slate-400 hover:bg-slate-200'}">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          Debug
-        </button>
         <span class="flex items-center gap-1.5 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
@@ -835,38 +873,6 @@ L.geoJSON(pagAsaBoundary, {
         </span>
       </div>
     </div>
-
-    <!-- Debug Panel -->
-    {#if showDebug}
-      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p class="text-xs font-bold text-blue-900 mb-2">🐛 Debug Information</p>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div class="bg-white rounded-lg px-3 py-2">
-            <p class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-wide">Total Residents</p>
-            <p class="text-blue-700 font-bold text-lg">{allResidents.length}</p>
-          </div>
-          <div class="bg-white rounded-lg px-3 py-2">
-            <p class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-wide">Total Households</p>
-            <p class="text-blue-700 font-bold text-lg">{households.length}</p>
-          </div>
-          <div class="bg-white rounded-lg px-3 py-2">
-            <p class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-wide">With GPS</p>
-            <p class="text-emerald-600 font-bold text-lg">{residentsWithGPS}</p>
-          </div>
-          <div class="bg-white rounded-lg px-3 py-2">
-            <p class="text-slate-500 text-[0.65rem] font-bold uppercase tracking-wide">Without GPS</p>
-            <p class="text-red-600 font-bold text-lg">{residentsWithoutGPS}</p>
-          </div>
-        </div>
-        {#if residentsWithoutGPS > 0}
-          <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            <p class="text-amber-800 text-xs font-semibold">
-              ⚠️ {residentsWithoutGPS} residents don't have GPS coordinates.
-            </p>
-          </div>
-        {/if}
-      </div>
-    {/if}
 
     <!-- Search + Street filter -->
     <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
@@ -999,7 +1005,7 @@ L.geoJSON(pagAsaBoundary, {
       <!-- Count badge -->
       <div class="absolute top-3 right-3 z-10 max-w-[calc(100%-1.5rem)] bg-white rounded-lg shadow-sm border border-slate-100 px-3 py-1.5 flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-        <span class="text-xs font-bold text-slate-600">{filteredHouseholds.length} households · {allResidents.length} residents</span>
+        <span class="text-xs font-bold text-slate-600">{filteredHouseholds.length} households · {totalHouseholdMembers} residents</span>
       </div>
     </div>
 

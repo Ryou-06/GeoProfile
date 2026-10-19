@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-labelledby="title desc">
+  <title id="title">Demo household exterior</title><desc id="desc">Illustrated residential house used only for the GeoProfile demonstration.</desc>
+  <defs><linearGradient id="sky" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#bde7ff"/><stop offset="1" stop-color="#f9fcff"/></linearGradient></defs>
+  <rect width="960" height="600" fill="url(#sky)"/><circle cx="790" cy="105" r="48" fill="#ffe58a"/><path d="M0 402C155 353 297 420 445 383S727 353 960 405V600H0Z" fill="#a8d58b"/>
+  <path d="M176 401V237l205-137 205 137v164Z" fill="#f5e6c7" stroke="#a86040" stroke-width="10"/><path d="M127 244 381 74l254 170-35 50-219-145-219 145Z" fill="#b75442"/>
+  <rect x="338" y="338" width="86" height="227" rx="5" fill="#855238"/><circle cx="405" cy="449" r="8" fill="#f7d87c"/><rect x="219" y="310" width="78" height="78" fill="#94d5e9" stroke="#a86040" stroke-width="10"/><rect x="469" y="310" width="78" height="78" fill="#94d5e9" stroke="#a86040" stroke-width="10"/>
+  <path d="M90 520h780" stroke="#d8c095" stroke-width="22" stroke-linecap="round"/><rect x="36" y="34" width="272" height="62" rx="31" fill="#0f766e"/><text x="172" y="75" fill="white" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">DEMO HOUSEHOLD</text>
+  <text x="480" y="570" fill="#49634f" font-family="Arial, sans-serif" font-size="20" text-anchor="middle">Illustration for system demonstration only</text>
+</svg>
