@@ -11,6 +11,9 @@
     email?: string;
     qrId?: string;
     householdId?: string;
+    parents?: { father?: Record<string, unknown>; mother?: Record<string, unknown> };
+    familyMembers?: Record<string, unknown>[];
+    occupantRecords?: Record<string, unknown>[];
   }
   
   export let resident: Resident | null = null;
@@ -20,6 +23,7 @@
   
   let sending = false;
   let emailData = { reason: '', includeQR: true };
+  let recipientEmail = '';
   
   let qrCodeUrl: string | null = null;
   let loadedQrHouseholdId = '';
@@ -27,6 +31,34 @@
   $: if (emailData.includeQR && householdId && loadedQrHouseholdId !== householdId) {
     loadedQrHouseholdId = householdId;
     fetchQRCode();
+  }
+  $: householdEmailRecipients = getHouseholdEmailRecipients(resident);
+  $: if (!recipientEmail || !householdEmailRecipients.some((recipient) => recipient.email === recipientEmail)) {
+    recipientEmail = householdEmailRecipients[0]?.email ?? '';
+  }
+
+  function text(value: unknown) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function personName(person: Record<string, unknown>) {
+    return text(person.fullName) || text(person.name) || [text(person.firstName), text(person.middleName), text(person.lastName)].filter(Boolean).join(' ') || 'Household member';
+  }
+
+  function getHouseholdEmailRecipients(record: Resident | null) {
+    if (!record) return [] as { email: string; name: string }[];
+    const people: Record<string, unknown>[] = [record as unknown as Record<string, unknown>];
+    if (record.parents?.father) people.push(record.parents.father);
+    if (record.parents?.mother) people.push(record.parents.mother);
+    people.push(...(record.familyMembers ?? []), ...(record.occupantRecords ?? []));
+
+    const seen = new Set<string>();
+    return people.flatMap((person) => {
+      const email = text(person.email).toLowerCase();
+      if (!email || seen.has(email)) return [];
+      seen.add(email);
+      return [{ email, name: personName(person) }];
+    });
   }
   
   // Fetch QR code for the household
@@ -62,6 +94,10 @@
       alert('Please provide a reason for declining');
       return;
     }
+    if (!recipientEmail) {
+      alert('Select a household email recipient first.');
+      return;
+    }
     
     sending = true;
     
@@ -76,6 +112,7 @@
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           residentId: resident?.id,
+          recipientEmail,
           reason: emailData.reason,
           includeQR: emailData.includeQR
         })
@@ -159,9 +196,16 @@
           <span class="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
             Recipient Email
           </span>
-          <p class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            {resident?.email || 'No email address on this resident record'}
-          </p>
+          {#if householdEmailRecipients.length}
+            <select bind:value={recipientEmail} class="w-full rounded-xl border-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-red-400">
+              {#each householdEmailRecipients as recipient (recipient.email)}
+                <option value={recipient.email}>{recipient.name} — {recipient.email}</option>
+              {/each}
+            </select>
+            <p class="mt-1 text-xs text-slate-500">Choose any Gmail address recorded for this household.</p>
+          {:else}
+            <p class="w-full rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">No Gmail address is recorded for this household.</p>
+          {/if}
         </div>
 
         <div class="block">

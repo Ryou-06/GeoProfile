@@ -61,6 +61,29 @@ function enforceRateLimit(uid: string) {
   sendAttempts.set(uid, recentAttempts);
 }
 
+function householdEmails(resident: Record<string, unknown>) {
+  const people: Record<string, unknown>[] = [resident];
+  const parents = resident.parents;
+  if (parents && typeof parents === 'object') {
+    const parentRecords = parents as Record<string, unknown>;
+    for (const key of ['father', 'mother']) {
+      const parent = parentRecords[key];
+      if (parent && typeof parent === 'object') people.push(parent as Record<string, unknown>);
+    }
+  }
+  for (const field of ['familyMembers', 'occupantRecords']) {
+    const entries = resident[field];
+    if (Array.isArray(entries)) {
+      for (const entry of entries) if (entry && typeof entry === 'object') people.push(entry as Record<string, unknown>);
+    }
+  }
+  return new Set(
+    people
+      .map((person) => typeof person.email === 'string' ? person.email.trim().toLowerCase() : '')
+      .filter(Boolean)
+  );
+}
+
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const authorization = request.headers.get('authorization');
@@ -76,6 +99,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const body = await request.json();
     const residentId = typeof body.residentId === 'string' ? body.residentId.trim() : '';
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    const requestedRecipient = typeof body.recipientEmail === 'string' ? body.recipientEmail.trim().toLowerCase() : '';
     const includeQR = body.includeQR === true;
     if (!residentId || residentId.length > 256) throw error(400, 'A valid resident is required.');
     if (reason.length < 5 || reason.length > 2000) {
@@ -87,7 +111,9 @@ export const POST: RequestHandler = async ({ request }) => {
     const residentSnapshot = await db.collection('residents').doc(residentId).get();
     if (!residentSnapshot.exists) throw error(404, 'Resident record not found.');
     const resident = residentSnapshot.data() ?? {};
-    const to = typeof resident.email === 'string' ? resident.email.trim() : '';
+    const permittedRecipients = householdEmails(resident);
+    const to = requestedRecipient || (typeof resident.email === 'string' ? resident.email.trim().toLowerCase() : '');
+    if (!permittedRecipients.has(to)) throw error(400, 'Choose an email address recorded for this household.');
     if (!to) throw error(400, 'This resident does not have an email address.');
     const residentName =
       typeof resident.name === 'string' && resident.name.trim()

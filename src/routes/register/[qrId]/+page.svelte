@@ -1,6 +1,7 @@
 <!-- Public QR household profiling form -->
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { SvelteDate } from 'svelte/reactivity';
   import { page } from '$app/stores';
   import { logAuditEvent } from '$lib/audit';
   import { isInsidePagAsa } from '$lib/pagasaBoundary.js';
@@ -10,7 +11,7 @@
   const TOTAL_STEPS = 6;
   const todayDate = new Date().toISOString().slice(0, 10);
   const minimumAgeDate = (() => {
-    const date = new Date();
+    const date = new SvelteDate();
     date.setMonth(date.getMonth() - 1);
     return date.toISOString().slice(0, 10);
   })();
@@ -30,6 +31,10 @@
 
   interface PersonProfile {
     fullName: string;
+    lastName: string;
+    firstName: string;
+    middleName: string;
+    suffix: string;
     birthdate: string;
     placeOfBirth: string;
     sex: string;
@@ -44,6 +49,8 @@
     pwdProofPreview: string;
     seniorProof: File | null;
     seniorProofPreview: string;
+    singleParentProof: File | null;
+    singleParentProofPreview: string;
     vaccinationStatus: string;
     bloodType: string;
     medicalNotes: string;
@@ -147,6 +154,10 @@
   function createPerson(): PersonProfile {
     return {
       fullName: '',
+      lastName: '',
+      firstName: '',
+      middleName: '',
+      suffix: '',
       birthdate: '',
       placeOfBirth: '',
       sex: '',
@@ -161,6 +172,8 @@
       pwdProofPreview: '',
       seniorProof: null,
       seniorProofPreview: '',
+      singleParentProof: null,
+      singleParentProofPreview: '',
       vaccinationStatus: '',
       bloodType: '',
       medicalNotes: ''
@@ -181,6 +194,10 @@
   function isSenior(person: PersonProfile) {
     const age = calculateAge(person.birthdate);
     return age !== null && age >= 60;
+  }
+
+  function isSingleParent(person: PersonProfile) {
+    return ['Widowed', 'Separated', 'Annulled'].includes(person.civilStatus);
   }
 
   function markInvalid(field: string, message: string) {
@@ -254,21 +271,21 @@
     return !Number.isNaN(date.getTime()) && value <= minimumAgeDate && age !== null && age >= 0 && age <= 120;
   }
 
+  function composeFullName(person: PersonProfile) {
+    return [person.firstName, person.middleName, person.lastName, person.suffix]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
+  function syncFullName(person: PersonProfile) {
+    person.fullName = composeFullName(person);
+  }
+
   function isNonNegativeNumber(value: string) {
     if (!String(value).trim()) return true;
     const number = Number(value);
     return Number.isFinite(number) && number >= 0;
-  }
-
-  function personLabelFromPrefix(fieldPrefix: string) {
-    if (fieldPrefix === 'father') return 'Father/head';
-    if (fieldPrefix === 'mother') return 'Mother/head';
-    if (fieldPrefix.startsWith('member-')) {
-      const index = Number(fieldPrefix.replace('member-', ''));
-      const label = householdType === 'boarding' ? 'Tenant/boarder' : 'Family member';
-      return `${label} ${Number.isFinite(index) ? index + 1 : ''}`.trim();
-    }
-    return 'Resident';
   }
 
   function getPersonByPrefix(fieldPrefix: string): PersonProfile | FamilyMember | null {
@@ -289,8 +306,9 @@
     const person = getPersonByPrefix(fieldPrefix);
     if (!person) return '';
 
-    if (key === 'fullName' && person.fullName.trim() && !isValidPersonName(person.fullName)) {
-      return 'Numbers are not valid in full name.';
+    if (['lastName', 'firstName', 'middleName', 'suffix'].includes(key)) {
+      const value = person[key as keyof PersonProfile] as string;
+      if (value.trim() && !isValidPersonName(value)) return 'Numbers are not valid in names.';
     }
     if (key === 'birthdate' && person.birthdate) {
       if (person.birthdate > todayDate) return 'Future dates are not allowed.';
@@ -312,6 +330,7 @@
     else if (key in person) {
       (person as unknown as Record<string, string>)[key] = target.value;
     }
+    if (['lastName', 'firstName', 'middleName', 'suffix'].includes(key)) syncFullName(person);
     validatePersonField(person, fieldPrefix, key, force, target.value);
     refreshPerson(person);
   }
@@ -319,10 +338,13 @@
   function validatePersonField(person: PersonProfile | FamilyMember, fieldPrefix: string, key: string, force = false, valueOverride?: string) {
     const field = `${fieldPrefix}.${key}`;
     let message = '';
-    const label = personLabelFromPrefix(fieldPrefix);
     const value = valueOverride ?? '';
     const relationship = 'relationship' in person && valueOverride !== undefined ? value : 'relationship' in person ? person.relationship : '';
     const fullName = key === 'fullName' && valueOverride !== undefined ? value : person.fullName;
+    const lastName = key === 'lastName' && valueOverride !== undefined ? value : person.lastName;
+    const firstName = key === 'firstName' && valueOverride !== undefined ? value : person.firstName;
+    const middleName = key === 'middleName' && valueOverride !== undefined ? value : person.middleName;
+    const suffix = key === 'suffix' && valueOverride !== undefined ? value : person.suffix;
     const birthdate = key === 'birthdate' && valueOverride !== undefined ? value : person.birthdate;
     const placeOfBirth = key === 'placeOfBirth' && valueOverride !== undefined ? value : person.placeOfBirth;
     const sex = key === 'sex' && valueOverride !== undefined ? value : person.sex;
@@ -339,6 +361,16 @@
       if (!fullName.trim()) message = 'Full name is required.';
       else if (!isValidPersonName(fullName)) message = 'Full name must use letters only, not numbers.';
     }
+    if (key === 'lastName' && (force || lastName.trim())) {
+      if (!lastName.trim()) message = 'Last name is required.';
+      else if (!isValidPersonName(lastName)) message = 'Last name must use letters only, not numbers.';
+    }
+    if (key === 'firstName' && (force || firstName.trim())) {
+      if (!firstName.trim()) message = 'First name is required.';
+      else if (!isValidPersonName(firstName)) message = 'First name must use letters only, not numbers.';
+    }
+    if (key === 'middleName' && middleName.trim() && !isValidPersonName(middleName)) message = 'Middle name must use letters only, not numbers.';
+    if (key === 'suffix' && suffix.trim() && !isValidPersonName(suffix)) message = 'Suffix must use letters only, not numbers.';
     if (key === 'birthdate' && (force || birthdate)) {
       if (!birthdate) message = 'Birthdate is required.';
       else if (birthdate > todayDate) message = 'Future dates are not allowed.';
@@ -580,7 +612,7 @@
     reader.readAsDataURL(file);
   }
 
-  function handlePersonProofChange(event: Event, person: PersonProfile, field: 'pwd' | 'senior') {
+  function handlePersonProofChange(event: Event, person: PersonProfile, field: 'pwd' | 'senior' | 'singleParent') {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -595,10 +627,16 @@
         person.pwdProofPreview = preview;
         refreshPerson(person);
       });
-    } else {
+    } else if (field === 'senior') {
       person.seniorProof = file;
       fileToPreview(file, (preview) => {
         person.seniorProofPreview = preview;
+        refreshPerson(person);
+      });
+    } else {
+      person.singleParentProof = file;
+      fileToPreview(file, (preview) => {
+        person.singleParentProofPreview = preview;
         refreshPerson(person);
       });
     }
@@ -685,8 +723,13 @@
   }
 
   function personIsValid(person: PersonProfile, label: string, fieldPrefix: string) {
-    if (!person.fullName.trim()) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name is required.`);
-    if (!isValidPersonName(person.fullName)) return markInvalid(`${fieldPrefix}.fullName`, `${label}: full name must use letters only, not numbers.`);
+    syncFullName(person);
+    if (!person.lastName.trim()) return markInvalid(`${fieldPrefix}.lastName`, `${label}: last name is required.`);
+    if (!isValidPersonName(person.lastName)) return markInvalid(`${fieldPrefix}.lastName`, `${label}: last name must use letters only, not numbers.`);
+    if (!person.firstName.trim()) return markInvalid(`${fieldPrefix}.firstName`, `${label}: first name is required.`);
+    if (!isValidPersonName(person.firstName)) return markInvalid(`${fieldPrefix}.firstName`, `${label}: first name must use letters only, not numbers.`);
+    if (person.middleName.trim() && !isValidPersonName(person.middleName)) return markInvalid(`${fieldPrefix}.middleName`, `${label}: middle name must use letters only, not numbers.`);
+    if (person.suffix.trim() && !isValidPersonName(person.suffix)) return markInvalid(`${fieldPrefix}.suffix`, `${label}: suffix must use letters only, not numbers.`);
     if (!person.birthdate) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: birthdate is required.`);
     if (person.birthdate > minimumAgeDate) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: resident must be at least 1 month old.`);
     if (!isValidBirthdate(person.birthdate)) return markInvalid(`${fieldPrefix}.birthdate`, `${label}: enter a valid birthdate.`);
@@ -699,6 +742,7 @@
     if (person.isPWD && !person.pwdType) return markInvalid(`${fieldPrefix}.pwdType`, `${label}: PWD type is required.`);
     if (person.isPWD && !person.pwdProof) return markInvalid(`${fieldPrefix}.pwdProof`, `${label}: PWD proof is required.`);
     if (isSenior(person) && !person.seniorProof) return markInvalid(`${fieldPrefix}.seniorProof`, `${label}: senior proof is required.`);
+    if (isSingleParent(person) && !person.singleParentProof) return markInvalid(`${fieldPrefix}.singleParentProof`, `${label}: single parent proof is required.`);
     return '';
   }
 
@@ -792,8 +836,13 @@
   }
 
   function serializePerson(person: PersonProfile) {
+    syncFullName(person);
     return {
       fullName: person.fullName.trim(),
+      lastName: person.lastName.trim(),
+      firstName: person.firstName.trim(),
+      middleName: person.middleName.trim(),
+      suffix: person.suffix.trim(),
       birthdate: person.birthdate,
       age: calculateAge(person.birthdate),
       placeOfBirth: person.placeOfBirth.trim(),
@@ -806,6 +855,7 @@
       isPWD: person.isPWD,
       pwdType: person.isPWD ? person.pwdType : null,
       isSenior: isSenior(person),
+      isSingleParent: isSingleParent(person),
       vaccinationStatus: person.vaccinationStatus,
       bloodType: person.bloodType,
       medicalNotes: person.medicalNotes.trim()
@@ -815,12 +865,15 @@
   async function serializeProofs(person: PersonProfile) {
     const pwdProof = person.isPWD ? await readProofImage(person.pwdProof) : null;
     const seniorProof = isSenior(person) ? await readProofImage(person.seniorProof) : null;
+    const singleParentProof = isSingleParent(person) ? await readProofImage(person.singleParentProof) : null;
 
     return {
       pwdProof,
       pwdIdProof: pwdProof,
       seniorProof,
-      seniorIdProof: seniorProof
+      seniorIdProof: seniorProof,
+      singleParentProof,
+      singleParentIdProof: singleParentProof
     };
   }
 
@@ -868,6 +921,7 @@
       }
 
       const primary = headOfFamily ?? createPerson();
+      syncFullName(primary);
       const primaryName = primary.fullName.trim() || businessInfo.ownerName.trim() || boardingInfo.ownerName.trim() || 'Household Profile';
       const primaryProofs = await serializeProofs(primary);
       const soloParentProofValue = isSingleParentHousehold ? await readProofImage(singleParentProof) : null;
@@ -898,11 +952,14 @@
         familyMembers: memberProfiles,
         occupantRecords: householdType === 'boarding' ? memberProfiles : [],
         memberCount: members.length,
-        singleParent: isSingleParentHousehold,
-        singleParentProof: soloParentProofValue,
-        singleParentIdProof: soloParentProofValue,
-        firstName: getFirstName(primaryName),
-        lastName: getLastName(primaryName),
+        singleParent: isSingleParentHousehold || isSingleParent(primary) || members.some(isSingleParent),
+        isSingleParent: isSingleParentHousehold || isSingleParent(primary) || members.some(isSingleParent),
+        singleParentProof: soloParentProofValue || primaryProofs.singleParentProof,
+        singleParentIdProof: soloParentProofValue || primaryProofs.singleParentProof,
+        firstName: primary.firstName.trim() || getFirstName(primaryName),
+        lastName: primary.lastName.trim() || getLastName(primaryName),
+        middleName: primary.middleName.trim(),
+        suffix: primary.suffix.trim(),
         name: primaryName,
         email: primary.email.trim().toLowerCase(),
         birthdate: primary.birthdate,
@@ -919,7 +976,6 @@
         isSenior: primaryIsSenior || members.some((member) => isSenior(member)),
         seniorProof: primaryProofs.seniorProof,
         seniorIdProof: primaryProofs.seniorIdProof,
-        isSingleParent: isSingleParentHousehold,
         lat: gpsLat,
         lng: gpsLng,
         gpsAccuracy,
@@ -1414,7 +1470,10 @@
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
     <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
       {#if showRelationship}<div class="field-block"><label class="label">Relationship / Room <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.relationship" class="input {fieldInvalid(`${fieldPrefix}.relationship`) ? 'input-error' : ''}" bind:value={(person as FamilyMember).relationship} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'relationship')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'relationship', true)} />{@render FieldError(`${fieldPrefix}.relationship`)}<p class="tip">{title.includes('Tenant') ? 'Use room number or tenant relationship to the owner.' : 'Example: son, daughter, sibling, grandparent.'}</p></div>{/if}
-      <div class="field-block"><label class="label">Full Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.fullName" class="input {fieldInvalid(`${fieldPrefix}.fullName`) ? 'input-error' : ''}" bind:value={person.fullName} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'fullName')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'fullName', true)} />{@render FieldError(`${fieldPrefix}.fullName`)}<p class="tip">Letters only. Enter complete name as used in IDs or barangay records.</p></div>
+      <div class="field-block"><label class="label">Last Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.lastName" class="input {fieldInvalid(`${fieldPrefix}.lastName`) ? 'input-error' : ''}" bind:value={person.lastName} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'lastName')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'lastName', true)} />{@render FieldError(`${fieldPrefix}.lastName`)}</div>
+      <div class="field-block"><label class="label">First Name <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.firstName" class="input {fieldInvalid(`${fieldPrefix}.firstName`) ? 'input-error' : ''}" bind:value={person.firstName} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'firstName')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'firstName', true)} />{@render FieldError(`${fieldPrefix}.firstName`)}</div>
+      <div class="field-block"><label class="label">Middle Name <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.middleName" class="input {fieldInvalid(`${fieldPrefix}.middleName`) ? 'input-error' : ''}" bind:value={person.middleName} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'middleName')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'middleName', true)} />{@render FieldError(`${fieldPrefix}.middleName`)}</div>
+      <div class="field-block"><label class="label">Suffix <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.suffix" class="input {fieldInvalid(`${fieldPrefix}.suffix`) ? 'input-error' : ''}" bind:value={person.suffix} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'suffix')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'suffix', true)} placeholder="Jr., Sr., III" />{@render FieldError(`${fieldPrefix}.suffix`)}</div>
       <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" max={minimumAgeDate} bind:value={person.birthdate} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'birthdate', true)} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Resident must be at least 1 month old.</p></div>
       <div class="field-block"><label class="label">Place of Birth <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.placeOfBirth" class="input {fieldInvalid(`${fieldPrefix}.placeOfBirth`) ? 'input-error' : ''}" bind:value={person.placeOfBirth} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'placeOfBirth')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'placeOfBirth', true)} placeholder="City / Municipality / Province" />{@render FieldError(`${fieldPrefix}.placeOfBirth`)}<p class="tip">Required by the RBI individual record.</p></div>
       <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input {fieldInvalid(`${fieldPrefix}.sex`) ? 'input-error' : ''}" bind:value={person.sex} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'sex', true)}><option value="">Select</option><option>Male</option><option>Female</option></select>{@render FieldError(`${fieldPrefix}.sex`)}</div>
@@ -1443,6 +1502,13 @@
     {#if isSenior(person)}
       {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload {fieldInvalid(`${fieldPrefix}.seniorProof`) ? 'upload-error' : ''}" data-field="{fieldPrefix}.seniorProof" tabindex="-1">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{@render FieldError(`${fieldPrefix}.seniorProof`)}{/if}
     {/if}
+    {#if isSingleParent(person)}
+      <div class="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3">
+        <p class="text-sm font-bold text-violet-700">Single parent status detected</p>
+        <p class="text-xs text-violet-600">A proof document is required for Widowed, Separated, or Annulled status.</p>
+        {#if person.singleParentProofPreview}<img src={person.singleParentProofPreview} alt="Single parent proof" class="w-full h-36 object-cover rounded-xl border-2 border-violet-300" />{:else}<label class="upload {fieldInvalid(`${fieldPrefix}.singleParentProof`) ? 'upload-error' : ''}" data-field="{fieldPrefix}.singleParentProof" tabindex="-1">Upload Single Parent Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'singleParent')} class="hidden" /></label>{@render FieldError(`${fieldPrefix}.singleParentProof`)}{/if}
+      </div>
+    {/if}
   </div>
 {/snippet}
 
@@ -1457,7 +1523,10 @@
   <div class="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
     <p class="text-sm font-extrabold text-slate-700">{title}</p>
     <div class="review-grid">
-      {@render ReviewItem('Full Name', person.fullName || '-')}
+      {@render ReviewItem('Last Name', person.lastName || '-')}
+      {@render ReviewItem('First Name', person.firstName || '-')}
+      {@render ReviewItem('Middle Name', person.middleName || '-')}
+      {@render ReviewItem('Suffix', person.suffix || '-')}
       {#if 'relationship' in person}
         {@render ReviewItem('Relationship', person.relationship || '-')}
       {/if}
@@ -1471,6 +1540,7 @@
       {@render ReviewItem('Email', person.email || '-')}
       {@render ReviewItem('PWD', person.isPWD ? `${person.pwdType || 'Selected'} with proof` : 'No')}
       {@render ReviewItem('Senior Citizen', isSenior(person) ? 'Yes, proof uploaded' : 'No')}
+      {@render ReviewItem('Single Parent', isSingleParent(person) ? 'Yes, proof uploaded' : 'No')}
       {@render ReviewItem('Vaccination Status', person.vaccinationStatus || '-')}
       {@render ReviewItem('Blood Type', person.bloodType || '-')}
       {@render ReviewItem('Medical Notes', person.medicalNotes || '-')}
