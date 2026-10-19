@@ -126,8 +126,8 @@
   let singleParentProof: File | null = null;
   let singleParentProofPreview = '';
 
-  let father = createPerson();
-  let mother = createPerson();
+  let father = { ...createPerson(), sex: 'Male' };
+  let mother = { ...createPerson(), sex: 'Female' };
   let members: FamilyMember[] = [];
   let memberCount = 0;
 
@@ -430,6 +430,21 @@
       fatherStatus = 'absent';
       motherStatus = 'absent';
     }
+    syncParentDetails();
+  }
+
+  function syncParentDetails() {
+    father.sex = 'Male';
+    mother.sex = 'Female';
+
+    if (motherStatus === 'present' && fatherStatus === 'deceased') mother.civilStatus = 'Widowed';
+    else if (motherStatus === 'present' && fatherStatus === 'absent') mother.civilStatus = 'Separated';
+
+    if (fatherStatus === 'present' && motherStatus === 'deceased') father.civilStatus = 'Widowed';
+    else if (fatherStatus === 'present' && motherStatus === 'absent') father.civilStatus = 'Separated';
+
+    refreshPerson(father);
+    refreshPerson(mother);
   }
 
   function setMemberCount() {
@@ -722,7 +737,7 @@
     return fallback;
   }
 
-  function personIsValid(person: PersonProfile, label: string, fieldPrefix: string) {
+  function personIsValid(person: PersonProfile, label: string, fieldPrefix: string, requireSingleParentProof = true) {
     syncFullName(person);
     if (!person.lastName.trim()) return markInvalid(`${fieldPrefix}.lastName`, `${label}: last name is required.`);
     if (!isValidPersonName(person.lastName)) return markInvalid(`${fieldPrefix}.lastName`, `${label}: last name must use letters only, not numbers.`);
@@ -742,7 +757,7 @@
     if (person.isPWD && !person.pwdType) return markInvalid(`${fieldPrefix}.pwdType`, `${label}: PWD type is required.`);
     if (person.isPWD && !person.pwdProof) return markInvalid(`${fieldPrefix}.pwdProof`, `${label}: PWD proof is required.`);
     if (isSenior(person) && !person.seniorProof) return markInvalid(`${fieldPrefix}.seniorProof`, `${label}: senior proof is required.`);
-    if (isSingleParent(person) && !person.singleParentProof) return markInvalid(`${fieldPrefix}.singleParentProof`, `${label}: single parent proof is required.`);
+    if (requireSingleParentProof && isSingleParent(person) && !person.singleParentProof) return markInvalid(`${fieldPrefix}.singleParentProof`, `${label}: single parent proof is required.`);
     return '';
   }
 
@@ -786,11 +801,11 @@
 
     if (step === 3 && householdType === 'residential') {
       if (fatherStatus === 'present') {
-        const fatherError = personIsValid(father, 'Father/head', 'father');
+        const fatherError = personIsValid(father, 'Father/head', 'father', false);
         if (fatherError) return fatherError;
       }
       if (motherStatus === 'present') {
-        const motherError = personIsValid(mother, 'Mother/head', 'mother');
+        const motherError = personIsValid(mother, 'Mother/head', 'mother', false);
         if (motherError) return motherError;
       }
       if (fatherStatus !== 'present' && motherStatus !== 'present') return markInvalid('familySetup', 'At least one parent, head, or guardian must be present.');
@@ -1248,15 +1263,15 @@
           {:else}
             <div class="grid md:grid-cols-3 gap-3">
               <div class="field-block"><label class="label">Family Status <span class="text-red-400">*</span></label><select data-field="familySetup" class="input {fieldInvalid('familySetup') ? 'input-error' : ''}" bind:value={familySetup} on:change={syncFamilySetup}><option value="both">Both parents present</option><option value="mother_only">Mother only</option><option value="father_only">Father only</option><option value="guardian">Guardian only</option></select>{@render FieldError('familySetup')}<p class="tip">Choose who acts as the household head or guardian.</p></div>
-              <div class="field-block"><label class="label">Father Status <span class="text-red-400">*</span></label><select class="input" bind:value={fatherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
-              <div class="field-block"><label class="label">Mother Status <span class="text-red-400">*</span></label><select class="input" bind:value={motherStatus}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
+              <div class="field-block"><label class="label">Father Status <span class="text-red-400">*</span></label><select class="input" bind:value={fatherStatus} on:change={syncParentDetails}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
+              <div class="field-block"><label class="label">Mother Status <span class="text-red-400">*</span></label><select class="input" bind:value={motherStatus} on:change={syncParentDetails}><option value="present">Present</option><option value="deceased">Deceased</option><option value="absent">Absent</option></select></div>
             </div>
 
             {#if fatherStatus === 'present'}
-              {@render PersonFields('Father / Male Head', father, false, 'father')}
+              {@render PersonFields('Father / Male Head', father, false, 'father', true, false)}
             {/if}
             {#if motherStatus === 'present'}
-              {@render PersonFields('Mother / Female Head', mother, false, 'mother')}
+              {@render PersonFields('Mother / Female Head', mother, false, 'mother', true, false)}
             {/if}
 
             {#if isSingleParentHousehold}
@@ -1465,7 +1480,7 @@
   {/if}
 {/snippet}
 
-{#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false, fieldPrefix = title)}
+{#snippet PersonFields(title: string, person: PersonProfile | FamilyMember, showRelationship = false, fieldPrefix = title, parentSexLocked = false, showIndividualSingleParentProof = true)}
   <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
     <h3 class="font-nunito font-extrabold text-slate-700">{title}</h3>
     <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -1476,7 +1491,7 @@
       <div class="field-block"><label class="label">Suffix <span class="text-slate-300 normal-case">(optional)</span></label><input data-field="{fieldPrefix}.suffix" class="input {fieldInvalid(`${fieldPrefix}.suffix`) ? 'input-error' : ''}" bind:value={person.suffix} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'suffix')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'suffix', true)} placeholder="Jr., Sr., III" />{@render FieldError(`${fieldPrefix}.suffix`)}</div>
       <div class="field-block"><label class="label">Birthdate <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.birthdate" class="input {fieldInvalid(`${fieldPrefix}.birthdate`) ? 'input-error' : ''}" type="date" max={minimumAgeDate} bind:value={person.birthdate} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'birthdate', true)} />{@render FieldError(`${fieldPrefix}.birthdate`)}<p class="tip">Resident must be at least 1 month old.</p></div>
       <div class="field-block"><label class="label">Place of Birth <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.placeOfBirth" class="input {fieldInvalid(`${fieldPrefix}.placeOfBirth`) ? 'input-error' : ''}" bind:value={person.placeOfBirth} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'placeOfBirth')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'placeOfBirth', true)} placeholder="City / Municipality / Province" />{@render FieldError(`${fieldPrefix}.placeOfBirth`)}<p class="tip">Required by the RBI individual record.</p></div>
-      <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input {fieldInvalid(`${fieldPrefix}.sex`) ? 'input-error' : ''}" bind:value={person.sex} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'sex', true)}><option value="">Select</option><option>Male</option><option>Female</option></select>{@render FieldError(`${fieldPrefix}.sex`)}</div>
+      <div class="field-block"><label class="label">Sex <span class="text-red-400">*</span></label><select data-field="{fieldPrefix}.sex" class="input {fieldInvalid(`${fieldPrefix}.sex`) ? 'input-error' : ''}" bind:value={person.sex} on:change={(event) => handleLivePersonInput(event, person, fieldPrefix, 'sex', true)} disabled={parentSexLocked}><option value="">Select</option><option>Male</option><option>Female</option></select>{@render FieldError(`${fieldPrefix}.sex`)}{#if parentSexLocked}<p class="tip">Set automatically from the selected parent role.</p>{/if}</div>
       <div class="field-block"><label class="label">Civil Status <span class="text-slate-300 normal-case">(optional)</span></label><select class="input" bind:value={person.civilStatus}><option value="">Select</option><option>Single</option><option>Married</option><option>Widowed</option><option>Separated</option><option>Annulled</option></select></div>
       <div class="field-block"><label class="label">Citizenship <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.citizenship" class="input {fieldInvalid(`${fieldPrefix}.citizenship`) ? 'input-error' : ''}" bind:value={person.citizenship} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'citizenship')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'citizenship', true)} placeholder="e.g. Filipino" />{@render FieldError(`${fieldPrefix}.citizenship`)}<p class="tip">Required by the RBI individual record.</p></div>
       <div class="field-block"><label class="label">Occupation <span class="text-red-400">*</span></label><input data-field="{fieldPrefix}.occupation" class="input {fieldInvalid(`${fieldPrefix}.occupation`) ? 'input-error' : ''}" bind:value={person.occupation} on:input={(event) => handleLivePersonInput(event, person, fieldPrefix, 'occupation')} on:blur={(event) => handleLivePersonInput(event, person, fieldPrefix, 'occupation', true)} placeholder="e.g. Teacher, Vendor, N/A" />{@render FieldError(`${fieldPrefix}.occupation`)}<p class="tip">Required. If no occupation, enter N/A.</p></div>
@@ -1502,7 +1517,7 @@
     {#if isSenior(person)}
       {#if person.seniorProofPreview}<img src={person.seniorProofPreview} alt="Senior proof" class="w-full h-36 object-cover rounded-xl border-2 border-emerald-300" />{:else}<label class="upload {fieldInvalid(`${fieldPrefix}.seniorProof`) ? 'upload-error' : ''}" data-field="{fieldPrefix}.seniorProof" tabindex="-1">Upload Senior Citizen Proof<input type="file" accept="image/*" on:change={(event) => handlePersonProofChange(event, person, 'senior')} class="hidden" /></label>{@render FieldError(`${fieldPrefix}.seniorProof`)}{/if}
     {/if}
-    {#if isSingleParent(person)}
+    {#if showIndividualSingleParentProof && isSingleParent(person)}
       <div class="space-y-2 rounded-xl border border-violet-200 bg-violet-50 p-3">
         <p class="text-sm font-bold text-violet-700">Single parent status detected</p>
         <p class="text-xs text-violet-600">A proof document is required for Widowed, Separated, or Annulled status.</p>
