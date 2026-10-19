@@ -436,9 +436,11 @@
     showExportOptions = false;
   }
 
-  function buildExportTable() {
-    const headerCells = exportHeader().map((cell) => `<th>${escapeHtml(cell)}</th>`).join('');
-    const bodyRows = exportRows()
+  function buildExportTable(compact = false) {
+    const headers = compact ? exportHeader().slice(0, 4) : exportHeader();
+    const rows = compact ? exportRows().map((row) => row.slice(0, 4)) : exportRows();
+    const headerCells = headers.map((cell) => `<th>${escapeHtml(cell)}</th>`).join('');
+    const bodyRows = rows
       .map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`)
       .join('');
 
@@ -469,20 +471,84 @@
     showExportOptions = false;
   }
 
-  async function downloadPdf() {
-    const printWindow = window.open('', '_blank', 'width=1100,height=800');
-    if (!printWindow) {
-      alert('Please allow popups so GeoProfile can open the PDF print preview.');
-      return;
+  function assetAsDataUrl(path: string) {
+    return fetch(path)
+      .then((response) => response.blob())
+      .then((blob) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      }));
+  }
+
+  async function savePdf() {
+    showExportOptions = false;
+    try {
+      const [{ jsPDF }, autoTableModule] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+      const autoTable = autoTableModule.default;
+      const document = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const [barangayLogo, geoProfileLogo] = await Promise.all([
+        assetAsDataUrl('/pagasa-logo.jpg').catch(() => ''),
+        assetAsDataUrl('/GeoProfileLogo.png').catch(() => '')
+      ]);
+
+      if (barangayLogo) document.addImage(barangayLogo, 'JPEG', 14, 10, 18, 18);
+      if (geoProfileLogo) {
+        const properties = document.getImageProperties(geoProfileLogo);
+        const logoHeight = 14;
+        const logoWidth = logoHeight * (properties.width / properties.height);
+        document.addImage(geoProfileLogo, 'PNG', 283 - logoWidth, 12, logoWidth, logoHeight);
+      }
+      document.setFont('helvetica', 'bold');
+      document.setFontSize(16);
+      document.text('Barangay Pag-Asa GeoProfile Report', 38, 17);
+      document.setFont('helvetica', 'normal');
+      document.setFontSize(9);
+      document.text(`Report: ${reportTitle()}  |  Approval: ${filterLabel(approvalFilter, { approved: 'Approved Only', pending: 'Pending Only', declined: 'Declined Only' })}  |  Resident Status: ${filterLabel(residentFilter, residentStatusLabels)}`, 38, 23);
+      document.text(`Records included: ${reportBase.length.toLocaleString()}`, 38, 28);
+
+      autoTable(document, {
+        startY: 35,
+        head: [exportHeader().slice(0, 4)],
+        body: exportRows().map((row) => row.slice(0, 4).map(String)),
+        theme: 'grid',
+        headStyles: { fillColor: [29, 78, 216], textColor: 255 },
+        styles: { fontSize: 8, cellPadding: 2 }
+      });
+      document.save(exportFilename('pdf'));
+      await auditReportExport('pdf');
+    } catch (error) {
+      console.error('Could not generate PDF:', error);
+      alert('Could not generate the PDF. Please try again.');
     }
+  }
+
+  async function downloadPdf() {
     showExportOptions = false;
 
-    printWindow.document.write(`
+    // Print inside a temporary iframe so browsers do not treat the report as a popup.
+    const printFrame = document.createElement('iframe');
+    printFrame.title = 'GeoProfile report print preview';
+    printFrame.style.cssText = 'position:fixed; width:0; height:0; border:0; visibility:hidden;';
+    document.body.appendChild(printFrame);
+    const printDocument = printFrame.contentWindow?.document;
+    if (!printDocument) {
+      printFrame.remove();
+      alert('Could not prepare the print preview. Please try again.');
+      return;
+    }
+
+    printDocument.write(`
       <html>
         <head>
           <title>GeoProfile Reports</title>
           <style>
             body { color: #0f172a; font-family: Arial, sans-serif; margin: 32px; }
+            .report-header { align-items: center; border-bottom: 2px solid #1d4ed8; display: flex; gap: 14px; margin-bottom: 18px; padding-bottom: 14px; }
+            .report-header img { height: 58px; object-fit: contain; width: 58px; }
+            .report-header .geoprofile-logo { height: 44px; width: auto; }
+            .report-title { flex: 1; }
             h1 { font-size: 24px; margin: 0 0 6px; }
             p { color: #475569; font-size: 12px; margin: 0 0 18px; }
             table { border-collapse: collapse; font-size: 11px; width: 100%; }
@@ -493,18 +559,24 @@
           </style>
         </head>
         <body>
-          <h1>GeoProfile Reports</h1>
-          <p>
-            Report: ${escapeHtml(reportTitle())} |
-            Approval: ${escapeHtml(filterLabel(approvalFilter, {
-              approved: 'Approved Only',
-              pending: 'Pending Only',
-              declined: 'Declined Only'
-            }))} |
-            Resident Status: ${escapeHtml(filterLabel(residentFilter, residentStatusLabels))} |
-            Records included: ${reportBase.length.toLocaleString()}
-          </p>
-          ${buildExportTable()}
+          <div class="report-header">
+            <img src="${window.location.origin}/pagasa-logo.jpg" alt="Barangay Pag-Asa logo">
+            <div class="report-title">
+              <h1>Barangay Pag-Asa GeoProfile Report</h1>
+              <p>
+                Report: ${escapeHtml(reportTitle())} |
+                Approval: ${escapeHtml(filterLabel(approvalFilter, {
+                  approved: 'Approved Only',
+                  pending: 'Pending Only',
+                  declined: 'Declined Only'
+                }))} |
+                Resident Status: ${escapeHtml(filterLabel(residentFilter, residentStatusLabels))} |
+                Records included: ${reportBase.length.toLocaleString()}
+              </p>
+            </div>
+            <img class="geoprofile-logo" src="${window.location.origin}/GeoProfileLogo.png" alt="GeoProfile logo">
+          </div>
+          ${buildExportTable(true)}
           <script>
             window.addEventListener('load', () => {
               setTimeout(() => window.print(), 250);
@@ -513,7 +585,7 @@
         </body>
       </html>
     `);
-    printWindow.document.close();
+    printDocument.close();
     await auditReportExport('pdf');
   }
 
@@ -582,7 +654,14 @@
             on:click={downloadPdf}
             class="block w-full px-4 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50"
           >
-            Print / Save PDF
+            Print Report
+          </button>
+          <button
+            type="button"
+            on:click={savePdf}
+            class="block w-full px-4 py-2 text-left text-sm font-bold text-slate-600 hover:bg-slate-50"
+          >
+            Save PDF
           </button>
         </div>
       {/if}
@@ -721,18 +800,28 @@
                 <path d="M6 14h12v8H6z" />
               </svg>
             </div>
-            <h3 class="mt-4 font-nunito text-base font-extrabold text-slate-800">PDF Report</h3>
+            <h3 class="mt-4 font-nunito text-base font-extrabold text-slate-800">Print or Save PDF</h3>
             <p class="mt-1 min-h-10 text-sm font-semibold text-slate-500">
-              Opens a print-ready report that can be saved as PDF for official requests.
+              Print the current report or download a PDF file directly.
             </p>
-            <button
-              type="button"
-              on:click={downloadPdf}
-              disabled={loading || exportPreviewRows.length === 0}
-              class="mt-5 w-full rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
-            >
-              Print / Save PDF
-            </button>
+            <div class="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                on:click={downloadPdf}
+                disabled={loading || exportPreviewRows.length === 0}
+                class="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                Print Report
+              </button>
+              <button
+                type="button"
+                on:click={savePdf}
+                disabled={loading || exportPreviewRows.length === 0}
+                class="rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                Save PDF
+              </button>
+            </div>
           </div>
         </div>
 
