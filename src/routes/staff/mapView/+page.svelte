@@ -29,6 +29,10 @@
   /** @type {string|null} */
   let loadError    = null;
   let showDebug = false;
+  // Demo mode only changes this map's view restrictions; the saved boundary remains unchanged.
+  let demoMode = false;
+  /** @type {any} */
+  let pagAsaBounds = null;
   /** @type {(() => void) | null} */
   let resizeMap = null;
 
@@ -92,6 +96,24 @@
   $: residentsWithGPS    = allResidents.filter(r =>  r.lat && r.lng).length;
   $: residentsWithoutGPS = allResidents.filter(r => !r.lat || !r.lng).length;
 
+  function toggleDemoMode() {
+    demoMode = !demoMode;
+    if (!leafletMap) return;
+
+    if (demoMode) {
+      leafletMap.setMaxBounds(null);
+      leafletMap.setMinZoom(3);
+      leafletMap.setMaxZoom(20);
+      return;
+    }
+
+    if (leafletMap.getZoom() < 15) leafletMap.setZoom(15);
+    leafletMap.setMinZoom(15);
+    leafletMap.setMaxZoom(19);
+    leafletMap.setMaxBounds(pagAsaBounds);
+    leafletMap.panInsideBounds(pagAsaBounds, { animate: true });
+  }
+
   $: categoryCounts = selectedHouseholdResidents.reduce((acc, r) => {
     acc[r.category] = (acc[r.category] || 0) + 1;
     return acc;
@@ -113,7 +135,7 @@
     const L = /** @type {any} */ (window).L;
     const pagAsaCenter = [14.8279, 120.2884];
 
-    const pagAsaBounds = L.latLngBounds(
+    pagAsaBounds = L.latLngBounds(
       [14.8259, 120.2826],
       [14.8300, 120.2909],
     );
@@ -790,6 +812,12 @@
         <p class="text-xs text-slate-500">Barangay Pag-Asa · Staff View</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
+        <button type="button" on:click={toggleDemoMode} aria-pressed={demoMode}
+          title="Temporarily allow panning and zooming outside Barangay Pag-Asa"
+          class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border transition-colors {demoMode ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-700'}">
+          <span class="w-2 h-2 rounded-full {demoMode ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}"></span>
+          {demoMode ? 'Demo map: On' : 'Demo map'}
+        </button>
         <button on:click={() => showDebug = !showDebug}
           class="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full transition-colors {showDebug ? 'bg-blue-100 text-blue-700' : 'text-slate-400 hover:bg-slate-200'}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
