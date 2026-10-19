@@ -970,7 +970,13 @@
       try {
         const { db } = await import('$lib/firebase');
         const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const snap = await getDocs(query(collection(db, 'households'), where('qrId', '==', currentQrId)));
+        // The public Firestore rule only permits active QR households. Include the
+        // same constraint in the query so Firestore can authorize it safely.
+        const snap = await getDocs(query(
+          collection(db, 'households'),
+          where('qrId', '==', currentQrId),
+          where('status', '==', 'active')
+        ));
         if (snap.empty) {
           householdError = 'This QR code is invalid or has expired. Please contact your Barangay staff.';
         } else {

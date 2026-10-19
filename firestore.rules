@@ -41,6 +41,9 @@ service cloud.firestore {
       // Residents submit a profile through a public QR-registration form.
       allow create: if true;
       allow read: if isAdmin()
+        // The map is a staff-facing, read-only view of approved household profiles.
+        // Pending and declined profiles remain limited to the owner/admin rules below.
+        || (signedIn() && resource.data.status == 'approved')
         || (signedIn() && resource.data.encodedBy == request.auth.uid)
         || ownsHousehold(resource.data.householdId);
       allow update, delete: if isAdmin();
